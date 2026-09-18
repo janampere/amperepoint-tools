@@ -195,7 +195,7 @@ const banners = [
 // Wariant specjalny - banner wydarzenia. Imienny, wiec poza losowa pula.
 const KNM = {
   url: "https://amperepoint-tools.vercel.app/knm2026-jan-proszynski.jpg",
-  size: 150,
+  size: 300,
   href: "https://www.newmobilitycongress.com/",
   alt: "New Mobility Congress 2026, 23-25.09, MCK Katowice - Jan Prószyński, Ampere Point",
   note: "Banner imienny (Jan Prószyński) - ważny do 25.09.2026."
@@ -205,8 +205,17 @@ let current = Math.floor(Math.random() * banners.length);
 let mode = "random"; // "random" | "knm"
 
 function getBanner() {
-  if (mode === "knm") return KNM;
   return { url: banners[current], size: 130, href: null, alt: "Ampere Point" };
+}
+
+// Badge wydarzenia jako osobny blok pod stopka - banner Ampere Point zostaje.
+function knmBlock() {
+  return '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">'
+    + '<tr><td style="padding:16px 12px 4px 12px;border-top:1px solid #e8e8e8;">'
+    + '<a href="' + KNM.href + '" target="_blank" style="text-decoration:none;border:0;">'
+    + '<img src="' + KNM.url + '" alt="' + KNM.alt + '" width="' + KNM.size + '" height="' + KNM.size + '" '
+    + 'style="display:block;width:' + KNM.size + 'px;height:' + KNM.size + 'px;border:0;" />'
+    + '</a></td></tr></table>';
 }
 
 function bannerImg(b) {
@@ -214,8 +223,8 @@ function bannerImg(b) {
   return b.href ? '<a href="' + b.href + '" target="_blank" style="text-decoration:none;border:0;">' + img + '</a>' : img;
 }
 
-function sigHTML(b, name, phone) {
-  return '<table cellpadding="0" cellspacing="0" border="0" style="font-family:Helvetica Neue,Helvetica,Arial,sans-serif;color:#1a1a1a;border-collapse:collapse;"><tr><td style="vertical-align:middle;padding:12px 24px 12px 12px;"><table cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-bottom:3px;"><span style="font-size:17px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">' + name + '</span></td></tr><tr><td style="padding-bottom:14px;"><span style="font-size:12px;font-weight:700;color:#FF6B00;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">Ampere Point</span></td></tr><tr><td style="padding-bottom:5px;"><a href="tel:' + phone.replace(/\s/g,'') + '" style="font-size:12px;color:#555555;text-decoration:none;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">' + phone + '</a></td></tr><tr><td style="padding-bottom:14px;"><a href="https://www.amperepoint.com" style="font-size:12px;color:#FF6B00;text-decoration:none;font-weight:600;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">www.amperepoint.com</a></td></tr><tr><td><a href="https://www.linkedin.com/company/amperepoint/" style="font-size:11px;color:#0077b5;text-decoration:none;font-weight:700;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;margin-right:10px;">LinkedIn</a><a href="https://www.facebook.com/p/AmperePoint-61579079154085/" style="font-size:11px;color:#1877f2;text-decoration:none;font-weight:700;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;margin-right:10px;">Facebook</a><a href="https://www.instagram.com/ampere.point/" style="font-size:11px;color:#e1306c;text-decoration:none;font-weight:700;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;margin-right:10px;">Instagram</a><a href="https://www.youtube.com/@AmperePoint" style="font-size:11px;color:#ff0000;text-decoration:none;font-weight:700;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">YouTube</a></td></tr></table></td><td style="vertical-align:middle;padding:12px 12px 12px 24px;">' + bannerImg(b) + '</td></tr></table>';
+function sigHTML(b, name, phone, withKNM) {
+  return '<table cellpadding="0" cellspacing="0" border="0" style="font-family:Helvetica Neue,Helvetica,Arial,sans-serif;color:#1a1a1a;border-collapse:collapse;"><tr><td style="vertical-align:middle;padding:12px 24px 12px 12px;"><table cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-bottom:3px;"><span style="font-size:17px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">' + name + '</span></td></tr><tr><td style="padding-bottom:14px;"><span style="font-size:12px;font-weight:700;color:#FF6B00;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">Ampere Point</span></td></tr><tr><td style="padding-bottom:5px;"><a href="tel:' + phone.replace(/\s/g,'') + '" style="font-size:12px;color:#555555;text-decoration:none;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">' + phone + '</a></td></tr><tr><td style="padding-bottom:14px;"><a href="https://www.amperepoint.com" style="font-size:12px;color:#FF6B00;text-decoration:none;font-weight:600;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">www.amperepoint.com</a></td></tr><tr><td><a href="https://www.linkedin.com/company/amperepoint/" style="font-size:11px;color:#0077b5;text-decoration:none;font-weight:700;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;margin-right:10px;">LinkedIn</a><a href="https://www.facebook.com/p/AmperePoint-61579079154085/" style="font-size:11px;color:#1877f2;text-decoration:none;font-weight:700;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;margin-right:10px;">Facebook</a><a href="https://www.instagram.com/ampere.point/" style="font-size:11px;color:#e1306c;text-decoration:none;font-weight:700;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;margin-right:10px;">Instagram</a><a href="https://www.youtube.com/@AmperePoint" style="font-size:11px;color:#ff0000;text-decoration:none;font-weight:700;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">YouTube</a></td></tr></table></td><td style="vertical-align:middle;padding:12px 12px 12px 24px;">' + bannerImg(b) + '</td></tr></table>' + (withKNM ? knmBlock() : '');
 }
 
 function getVals() {
@@ -227,13 +236,12 @@ function getVals() {
 
 function render() {
   const v = getVals();
-  document.getElementById('preview').innerHTML = sigHTML(getBanner(), v.name, v.phone);
+  document.getElementById('preview').innerHTML = sigHTML(getBanner(), v.name, v.phone, mode === 'knm');
   document.getElementById('knmBtn').classList.toggle('active', mode === 'knm');
   document.getElementById('variantNote').textContent = mode === 'knm' ? KNM.note : '';
 }
 
 function reroll() {
-  if (mode === 'knm') { mode = 'random'; render(); return; }
   let next;
   do { next = Math.floor(Math.random() * banners.length); } while (next === current);
   current = next;
@@ -254,7 +262,7 @@ function toast(msg) {
 
 async function copyGmail() {
   const v = getVals();
-  const h = sigHTML(getBanner(), v.name, v.phone);
+  const h = sigHTML(getBanner(), v.name, v.phone, mode === 'knm');
   try {
     const blob = new Blob([h], { type: 'text/html' });
     await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
@@ -274,7 +282,7 @@ async function copyGmail() {
 
 async function copyHTML() {
   const v = getVals();
-  await navigator.clipboard.writeText(sigHTML(getBanner(), v.name, v.phone));
+  await navigator.clipboard.writeText(sigHTML(getBanner(), v.name, v.phone, mode === 'knm'));
   toast('✓ Skopiowano HTML! Wklej w trybie HTML Pipedrive.');
 }
 
