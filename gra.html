@@ -14,8 +14,10 @@
     cursor: none;
     -webkit-user-select: none; user-select: none;
     touch-action: none;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
   }
-  #game { display: block; width: 100%; height: 100%; }
+  #game { display: block; width: 100%; height: 100%; touch-action: none; }
   /* Lekki efekt CRT - arcade feel, prawie darmowy wydajnosciowo */
   #crt {
     position: fixed; inset: 0; pointer-events: none; z-index: 5;
@@ -78,6 +80,7 @@ function roundRect(ctx, x, y, w, h, r) {
 
 // ------------------------------------------------------------------- config
 const BRAND = '#FF6B00';
+const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
 const CFG = {
   segmentLength: 200,
   rumbleLength: 3,
@@ -211,8 +214,10 @@ const Input = {
   keys: {}, latch: {},
   down: {}, prev: {},
   lastActivity: 0,
+  touches: [], tapLatch: false, tapPoint: null, touchUsed: false,
 
   init() {
+    this.initTouch();
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
       this.keys[e.code] = true;
@@ -228,10 +233,30 @@ const Input = {
     window.addEventListener('gamepaddisconnected', () => { this.padName = ''; });
   },
 
+  initTouch() {
+    const sync = (e) => {
+      this.touches = Array.from(e.touches).map((t) => ({ x: t.clientX, y: t.clientY }));
+      this.lastActivity = performance.now();
+    };
+    const start = (e) => {
+      e.preventDefault();
+      sync(e);
+      this.touchUsed = true;
+      this.tapLatch = true;
+      const t = e.changedTouches[0];
+      this.pendingTap = { x: t.clientX, y: t.clientY };
+      Sfx.resume();
+    };
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); sync(e); }, { passive: false });
+    canvas.addEventListener('touchend', (e) => { e.preventDefault(); sync(e); }, { passive: false });
+    canvas.addEventListener('touchcancel', sync, { passive: false });
+  },
+
   poll() {
     this.prev = Object.assign({}, this.down);
     const d = { start: false, ok: false, back: false, up: false, down: false, left: false, right: false, mute: false };
-    let steer = 0, accel = 0, brake = 0;
+    let steer = 0, accel = 0, brake = 0, digital = true;
 
     // --- pad ---
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -246,7 +271,7 @@ const Input = {
 
       let a0 = ax(0);
       if (Math.abs(a0) < 0.18) a0 = 0;
-      steer = a0;
+      if (a0 !== 0) { steer = a0; digital = false; }
       if (btn(14)) steer = -1;
       if (btn(15)) steer = 1;
 
@@ -283,13 +308,42 @@ const Input = {
     if (Object.values(this.keys).some(Boolean)) this.lastActivity = performance.now();
     this.latch = {};
 
-    this.steer = clamp(steer, -1, 1);
+    // --- dotyk (telefon/tablet) ---
+    // Gaz jedzie sam, gracz tylko skreca - na malym ekranie wiecej przyciskow
+    // niz palcow. Srodkowy pas ekranu = hamulec.
+    this.tapPoint = this.pendingTap || null;   // tap zyje dokladnie jedna klatke
+    this.pendingTap = null;
+    if (this.touchUsed) {
+      let s = 0, braking = false;
+      for (const t of this.touches) {
+        if (t.x < W * 0.40) s -= 1;
+        else if (t.x > W * 0.60) s += 1;
+        else braking = true;
+      }
+      steer = clamp(s, -1, 1);
+      brake = braking ? 1 : 0;
+      accel = braking ? 0 : 1;
+      if (this.tapLatch) { d.start = true; d.ok = true; }
+    }
+    this.tapLatch = false;
+
+    // Wejscia cyfrowe (dotyk, klawiatura, d-pad) wygladzamy - bez tego auto
+    // szarpie na pelen wychyl w jednej klatce. Analog z drazka idzie bez zmian.
+    const target = clamp(steer, -1, 1);
+    if (digital) {
+      const rate = target === 0 ? 0.35 : 0.2;
+      this.steer = clamp(this.steer + (target - this.steer) * rate, -1, 1);
+      if (Math.abs(this.steer) < 0.02) this.steer = 0;
+    } else {
+      this.steer = target;
+    }
     this.accel = clamp(accel, 0, 1);
     this.brake = clamp(brake, 0, 1);
     this.down = d;
   },
 
   pressed(name) { return this.down[name] && !this.prev[name]; },
+  consumeTap() { const p = this.tapPoint; this.tapPoint = null; return p; },
   idleMs() { return performance.now() - this.lastActivity; }
 };
 
@@ -666,6 +720,7 @@ let state = 'attract';   // attract | countdown | play | gameover | initials
 let stateT = 0;
 let countdown = 3;
 let popups = [];         // plywajace +punkty
+let touchZones = [];     // klikalne obszary dla dotyku (wpis inicjalow)
 let initials = ['A', 'A', 'A'];
 let initialIdx = 0;
 let pendingRank = -1;
@@ -721,7 +776,7 @@ const ctx = canvas.getContext('2d', { alpha: false });
 let W = 0, H = 0, projW = 0;
 
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, IS_TOUCH ? 1.5 : 2);
   W = Math.floor(window.innerWidth);
   H = Math.floor(window.innerHeight);
   canvas.width = Math.floor(W * dpr);
@@ -928,7 +983,7 @@ function render() {
     const cw = projW * 0.195;
     const ch = cw * 0.94;
     const cx = W / 2 - cw / 2;
-    const cy = pDestY + bounce - ch;
+    const cy = Math.min(pDestY + bounce, H * 0.985) - ch;   // nie wychodz poza dolna krawedz
     ctx.save();
     ctx.translate(W / 2, cy + ch);
     ctx.rotate(-lean * 0.05);
@@ -1068,6 +1123,20 @@ function renderHUD() {
     ctx.globalAlpha = 1;
   });
 
+  // strefy dotyku - widoczne mocno na starcie, potem ledwo
+  if (Input.touchUsed) {
+    const fade = state === 'play' ? clamp(1 - (stateT - 4) / 3, 0.10, 1) : 1;
+    ctx.globalAlpha = fade * 0.5;
+    ['◀', '▶'].forEach((g, i) => {
+      const x = i ? W * 0.88 : W * 0.12;
+      const active = i ? Input.steer > 0.3 : Input.steer < -0.3;
+      ctx.fillStyle = active ? 'rgba(255,107,0,0.5)' : 'rgba(255,255,255,0.12)';
+      ctx.beginPath(); ctx.arc(x, H * 0.62, u * 7, 0, PI * 2); ctx.fill();
+      text(g, x, H * 0.62 + u * 2.6, { size: u * 7, color: '#fff', align: 'center' });
+    });
+    ctx.globalAlpha = 1;
+  }
+
   // ostrzezenie o baterii
   if (player.battery < 20 && Math.floor(performance.now() / 350) % 2 === 0) {
     text('NISKA BATERIA — ŁAP ŁADOWARKI!', W / 2, H * 0.80,
@@ -1084,7 +1153,11 @@ function padGlyph(x, y, r, label, color) {
 }
 
 function renderControlsHint(cx, cy, u) {
-  const items = [
+  const items = IS_TOUCH ? [
+    { g: '◀', t: 'DOTKNIJ LEWEJ STRONY' },
+    { g: '▮', t: 'ŚRODEK — HAMULEC' },
+    { g: '▶', t: 'DOTKNIJ PRAWEJ STRONY' }
+  ] : [
     { g: '↔', t: 'LEWY DRĄŻEK — SKRĘT' },
     { g: 'RT', t: 'GAZ  ·  LT — HAMULEC' },
     { g: 'A', t: 'START / POTWIERDŹ' }
@@ -1127,10 +1200,13 @@ function renderAttract() {
 
   const blink = Math.floor(t / 500) % 2 === 0;
   if (blink) {
-    text('WCIŚNIJ  START', W / 2, H * 0.90, { size: u * 5, color: '#fff', align: 'center', shadow: 3, spacing: 4 });
+    text(IS_TOUCH ? 'DOTKNIJ  EKRANU' : 'WCIŚNIJ  START', W / 2, H * 0.90,
+         { size: u * 5, color: '#fff', align: 'center', shadow: 3, spacing: 4 });
   }
 
-  const padTxt = Input.pad ? '● PAD: ' + Input.padName : '○ PODŁĄCZ PAD I WCIŚNIJ DOWOLNY PRZYCISK';
+  const padTxt = Input.pad ? '● PAD: ' + Input.padName
+               : IS_TOUCH ? 'GAZ JEDZIE SAM — TY TYLKO SKRĘCASZ'
+               : '○ PODŁĄCZ PAD I WCIŚNIJ DOWOLNY PRZYCISK';
   text(padTxt, W / 2, H * 0.96, { size: u * 1.6, color: Input.pad ? '#7fd88a' : '#8e9bb5', align: 'center', spacing: 1 });
   text('NEW MOBILITY CONGRESS 2026  ·  MCK KATOWICE', W / 2, H * 0.075,
        { size: u * 1.6, color: '#8e9bb5', align: 'center', spacing: 3 });
@@ -1153,6 +1229,7 @@ function renderCountdown() {
 
 function renderGameOver() {
   const u = Math.min(W, H) / 100;
+  touchZones = [];
   ctx.fillStyle = 'rgba(4,7,14,0.72)';
   ctx.fillRect(0, 0, W, H);
 
@@ -1184,13 +1261,30 @@ function renderGameOver() {
         roundRect(ctx, x - gap * 0.42, H * 0.755, gap * 0.84, u * 8.5, u * 0.8); ctx.fill();
       }
       text(ch, x, H * 0.825, { size: u * 6.5, color: active ? BRAND : '#fff', align: 'center', mono: true });
-      if (active && Math.floor(performance.now() / 300) % 2 === 0) {
+      const arrows = active && (IS_TOUCH || Math.floor(performance.now() / 300) % 2 === 0);
+      if (arrows) {
         text('▲', x, H * 0.745, { size: u * 2, color: BRAND, align: 'center' });
         text('▼', x, H * 0.875, { size: u * 2, color: BRAND, align: 'center' });
       }
+      if (IS_TOUCH) {
+        touchZones.push({ x: x - gap * 0.42, y: H * 0.70, w: gap * 0.84, h: H * 0.075,
+                          act: () => { initialIdx = i; cycleLetter(i, 1); } });
+        touchZones.push({ x: x - gap * 0.42, y: H * 0.845, w: gap * 0.84, h: H * 0.075,
+                          act: () => { initialIdx = i; cycleLetter(i, -1); } });
+        touchZones.push({ x: x - gap * 0.42, y: H * 0.755, w: gap * 0.84, h: H * 0.09,
+                          act: () => { initialIdx = i; Sfx.ui(); } });
+      }
     });
-    text('DRĄŻEK: ZMIANA LITERY   ·   A: ZATWIERDŹ', W / 2, H * 0.92,
-         { size: u * 1.8, color: '#b9c3d6', align: 'center', spacing: 2 });
+    if (IS_TOUCH) {
+      const bw = u * 26, bh = u * 6, bx = W / 2 - bw / 2, by = H * 0.925;
+      ctx.fillStyle = BRAND;
+      roundRect(ctx, bx, by, bw, bh, bh * 0.35); ctx.fill();
+      text('ZAPISZ WYNIK', W / 2, by + bh * 0.66, { size: u * 2.4, color: '#fff', align: 'center', spacing: 2 });
+      touchZones.push({ x: bx, y: by, w: bw, h: bh, act: submitInitials });
+    } else {
+      text('DRĄŻEK: ZMIANA LITERY   ·   A: ZATWIERDŹ', W / 2, H * 0.92,
+           { size: u * 1.8, color: '#b9c3d6', align: 'center', spacing: 2 });
+    }
   } else {
     if (Math.floor(performance.now() / 500) % 2 === 0) {
       text('START — JESZCZE RAZ', W / 2, H * 0.78,
@@ -1384,6 +1478,27 @@ function frame(now) {
   if (state === 'attract') renderAttract();
   if (state === 'countdown') renderCountdown();
   if (state === 'gameover' || state === 'initials') renderGameOver();
+  if (isPortrait()) renderRotateHint();
+}
+
+function isPortrait() { return IS_TOUCH && H > W * 1.05; }
+
+function renderRotateHint() {
+  const u = Math.min(W, H) / 100;
+  ctx.fillStyle = 'rgba(4,7,14,0.92)';
+  ctx.fillRect(0, 0, W, H);
+  const t = performance.now() * 0.002;
+  const w = u * 22, h = u * 40;
+  ctx.save();
+  ctx.translate(W / 2, H * 0.42);
+  ctx.rotate(-Math.sin(t) * 0.5 - 0.35);
+  ctx.strokeStyle = BRAND;
+  ctx.lineWidth = Math.max(3, u * 0.8);
+  roundRect(ctx, -w / 2, -h / 2, w, h, u * 2.5);
+  ctx.stroke();
+  ctx.restore();
+  text('OBRÓĆ TELEFON', W / 2, H * 0.70, { size: u * 6, color: '#fff', align: 'center', spacing: 3 });
+  text('gra działa w poziomie', W / 2, H * 0.76, { size: u * 3, color: '#8e9bb5', align: 'center' });
 }
 
 function tick(dt) {
@@ -1402,7 +1517,7 @@ function tick(dt) {
   switch (state) {
     case 'attract':
       updateAttractDemo(dt);
-      if (Input.pressed('start')) startRun();
+      if (Input.pressed('start') && !isPortrait()) startRun();
       break;
 
     case 'countdown':
@@ -1421,16 +1536,27 @@ function tick(dt) {
       updatePlay(dt);
       break;
 
-    case 'initials':
+    case 'initials': {
+      const tap = Input.consumeTap();
+      let handledTap = false;
+      if (tap && stateT > 0.4) {
+        for (const z of touchZones) {
+          if (tap.x >= z.x && tap.x <= z.x + z.w && tap.y >= z.y && tap.y <= z.y + z.h) {
+            z.act(); handledTap = true; break;
+          }
+        }
+      }
+      if (handledTap) break;
       if (Input.pressed('up')) cycleLetter(initialIdx, 1);
       if (Input.pressed('down')) cycleLetter(initialIdx, -1);
       if (Input.pressed('left')) { initialIdx = (initialIdx + 2) % 3; Sfx.ui(); }
       if (Input.pressed('right')) { initialIdx = (initialIdx + 1) % 3; Sfx.ui(); }
-      if (Input.pressed('ok') && stateT > 0.4) {
+      if (Input.pressed('ok') && stateT > 0.4 && !Input.touchUsed) {
         if (initialIdx < 2) { initialIdx++; Sfx.ui(); }
         else submitInitials();
       }
       break;
+    }
 
     case 'gameover':
       updateAttractDemo(dt * 0.35);
@@ -1452,6 +1578,8 @@ function toggleFullscreen() {
 document.getElementById('fsbtn').addEventListener('click', () => { toggleFullscreen(); Sfx.resume(); });
 window.addEventListener('keydown', (e) => { if (e.code === 'KeyF') toggleFullscreen(); });
 window.addEventListener('pointerdown', () => Sfx.resume());
+
+if (IS_TOUCH) CFG.drawDistance = 170;   // telefon nie udzwignie pelnego zasiegu
 
 loadScores();
 buildTrack();
