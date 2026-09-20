@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zapisz wynik – Ampere Rush</title>
+<link rel="icon" href="https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Ampere_Point_Icon_only.png?v=1695562289">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;900&family=Geist+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #FF6B00; --ink: #121212; --paper: #fff; --grey: #F3F3F3;
+    --line: #D8DCE3; --muted: #6B7280; --err: #D93025;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    background: var(--grey); color: var(--ink);
+    min-height: 100dvh; padding: 20px 16px 40px;
+    display: flex; justify-content: center;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { width: 100%; max-width: 440px; }
+  .logo { height: 34px; display: block; margin: 8px auto 22px; }
+  .logo-fallback { text-align: center; font-weight: 700; letter-spacing: 1px; margin: 8px 0 22px; }
+  .card { background: var(--paper); border: 1px solid var(--line); padding: 22px 20px; }
+  .card + .card { margin-top: 12px; }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 2.5px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .score {
+    font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 700;
+    font-size: 54px; line-height: 1.05; color: var(--brand); margin: 6px 0 14px;
+  }
+  .stats { display: flex; gap: 10px; }
+  .stat { flex: 1; background: var(--grey); padding: 10px 12px; }
+  .stat b {
+    display: block; font-family: 'Geist Mono', monospace; font-size: 18px; margin-top: 3px;
+  }
+  label.field { display: block; margin-top: 18px; }
+  label.field span {
+    display: block; font-size: 11px; font-weight: 600; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+  }
+  input[type=text], input[type=email] {
+    width: 100%; padding: 14px; font-family: inherit; font-size: 17px;
+    border: 1px solid var(--ink); border-radius: 0; background: var(--paper); color: var(--ink);
+  }
+  input:focus { outline: 2px solid var(--brand); outline-offset: -2px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .consent { display: flex; gap: 10px; margin-top: 16px; align-items: flex-start; }
+  .consent input { width: 22px; height: 22px; flex: none; margin-top: 1px; accent-color: var(--brand); }
+  .consent label { font-size: 12px; color: #333; line-height: 1.55; }
+  button {
+    width: 100%; margin-top: 20px; padding: 17px; border: none; border-radius: 0;
+    background: var(--brand); color: #fff; font-family: inherit; font-size: 17px;
+    font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer;
+  }
+  button:disabled { background: #C9CED8; }
+  .msg { margin-top: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+  .msg.err { background: #FDECEA; color: var(--err); border: 1px solid #F5C2BD; }
+  .msg.ok { background: #EAF5EC; color: #1E7B34; border: 1px solid #BFE0C6; }
+  .done-mark { font-size: 40px; line-height: 1; color: var(--brand); }
+  .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 22px; line-height: 1.6; }
+  .foot a { color: var(--brand); }
+  .skeleton { height: 54px; background: var(--grey); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <img class="logo" id="logo" alt="Ampere Point"
+       src="https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Ampere_Point_Version_2_small_200px.png?v=1695645866">
+  <div class="logo-fallback" id="logoFallback" hidden>AMPERE POINT</div>
+
+  <!-- widok: ladowanie / formularz / potwierdzenie / blad -->
+  <div class="card" id="loading">
+    <div class="eyebrow">Wczytuję wynik</div>
+    <div class="skeleton" style="margin-top:10px"></div>
+  </div>
+
+  <div id="formView" hidden>
+    <div class="card">
+      <div class="eyebrow">Twój wynik</div>
+      <div class="score" id="score">000000</div>
+      <div class="stats">
+        <div class="stat"><span class="eyebrow">Dystans</span><b id="dist">– m</b></div>
+        <div class="stat"><span class="eyebrow">Ładowarki</span><b id="picks">–</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <form id="form" novalidate>
+        <label class="field">
+          <span>Nick na tablicę wyników *</span>
+          <input type="text" id="nick" maxlength="16" autocomplete="nickname"
+                 autocapitalize="characters" required placeholder="np. KOWAL">
+        </label>
+
+        <label class="field">
+          <span>E-mail (nieobowiązkowy)</span>
+          <input type="email" id="email" autocomplete="email" inputmode="email"
+                 placeholder="jan@firma.pl">
+          <div class="hint">Zostaw adres, jeśli chcesz walczyć o nagrodę za najlepszy wynik
+            i dostać od nas ofertę. Na tablicę wchodzisz bez tego.</div>
+        </label>
+
+        <div class="consent" id="consentRow" hidden>
+          <input type="checkbox" id="consent">
+          <label for="consent">
+            Zgadzam się na kontakt handlowy od Ampere Point i przetwarzanie mojego adresu
+            e-mail w tym celu. Zgodę mogę wycofać w każdej chwili, pisząc na
+            <a href="mailto:hello@amperepoint.com">hello@amperepoint.com</a>.
+          </label>
+        </div>
+
+        <button type="submit" id="submit">Zapisz wynik</button>
+        <div class="msg err" id="formErr" hidden></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card" id="doneView" hidden>
+    <div class="done-mark">✓</div>
+    <h1 style="font-size:24px;margin:10px 0 8px">Jesteś na tablicy</h1>
+    <p style="font-size:15px;line-height:1.6;color:#333">
+      Spójrz na duży ekran przy stoisku — <b id="doneNick"></b> z wynikiem
+      <b id="doneScore"></b> powinien już tam być.
+    </p>
+    <div class="msg ok" id="doneMail" hidden>Mail zapisany. Odezwiemy się po targach.</div>
+  </div>
+
+  <div class="card" id="errView" hidden>
+    <div class="eyebrow">Coś nie wyszło</div>
+    <p style="font-size:16px;line-height:1.6;margin-top:8px" id="errText"></p>
+  </div>
+
+  <div class="foot">
+    Ampere Point · <a href="https://www.amperepoint.com">amperepoint.com</a><br>
+    New Mobility Congress 2026, MCK Katowice
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+// Obrazek potrafi paść, zanim ten skrypt sie wykona - samo nasluchiwanie
+// na 'error' to za malo, trzeba jeszcze sprawdzic stan po fakcie.
+function logoFailed() {
+  $('logo').hidden = true;
+  $('logoFallback').hidden = false;
+}
+$('logo').addEventListener('error', logoFailed);
+if ($('logo').complete && $('logo').naturalWidth === 0) logoFailed();
+
+const params = new URLSearchParams(location.search);
+const code = (params.get('c') || params.get('code') || '').trim().toUpperCase();
+
+function show(view) {
+  ['loading', 'formView', 'doneView', 'errView'].forEach((v) => { $(v).hidden = v !== view; });
+}
+function fail(text) { $('errText').textContent = text; show('errView'); }
+
+// Zgoda pojawia sie dopiero, gdy ktos faktycznie wpisuje maila.
+$('email').addEventListener('input', () => {
+  $('consentRow').hidden = $('email').value.trim() === '';
+});
+
+async function load() {
+  if (!code) return fail('Brak kodu przejazdu w adresie. Zeskanuj kod QR z ekranu przy stoisku jeszcze raz.');
+  let r;
+  try {
+    r = await fetch('/api/run?code=' + encodeURIComponent(code));
+  } catch (e) {
+    return fail('Brak połączenia z internetem. Włącz dane i odśwież stronę — kod jest ważny przez dobę.');
+  }
+  if (r.status === 404) return fail('Nie znam tego kodu. Mógł wygasnąć (kody działają dobę) albo w adresie jest literówka.');
+  if (r.status === 503) return fail('Zapisywanie wyników jest chwilowo niedostępne. Spróbuj za moment — kod jest ważny przez dobę.');
+  if (!r.ok) return fail('Coś się posypało po naszej stronie. Spróbuj odświeżyć stronę.');
+
+  const run = await r.json();
+  if (run.claimed) {
+    $('doneNick').textContent = run.nick || '–';
+    $('doneScore').textContent = String(run.score);
+    return show('doneView');
+  }
+  $('score').textContent = String(run.score).padStart(6, '0');
+  $('dist').textContent = run.distance + ' m';
+  $('picks').textContent = String(run.pickups);
+  if (run.initials) $('nick').value = run.initials;
+  show('formView');
+  $('nick').focus();
+}
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nick = $('nick').value.trim();
+  const email = $('email').value.trim();
+  const consent = $('consent').checked;
+  const err = $('formErr');
+  err.hidden = true;
+
+  if (!nick) { err.textContent = 'Wpisz nick — pod nim wejdziesz na tablicę.'; err.hidden = false; return; }
+  if (email && !consent) {
+    err.textContent = 'Zaznacz zgodę, żebyśmy mogli zapisać Twój adres. Możesz też zostawić pole e-mail puste.';
+    err.hidden = false; return;
+  }
+
+  $('submit').disabled = true;
+  $('submit').textContent = 'Zapisuję…';
+  try {
+    const r = await fetch('/api/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, nick, email, consent })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok) {
+      $('doneNick').textContent = data.nick || nick;
+      $('doneScore').textContent = String(data.score);
+      $('doneMail').hidden = !email;
+      return show('doneView');
+    }
+    if (r.status === 409) {
+      $('doneNick').textContent = data.nick || nick;
+      $('doneScore').textContent = $('score').textContent.replace(/^0+/, '');
+      return show('doneView');
+    }
+    const map = {
+      bad_email: 'Ten adres e-mail wygląda na niepoprawny. Popraw go albo zostaw pole puste.',
+      no_nick: 'Wpisz nick — pod nim wejdziesz na tablicę.',
+      no_consent: 'Zaznacz zgodę albo zostaw pole e-mail puste.',
+      unknown_code: 'Kod wygasł albo jest błędny. Zagraj jeszcze raz przy stoisku.',
+      not_configured: 'Zapisywanie wyników jest chwilowo wyłączone.',
+      store_unavailable: 'Nie mogę teraz zapisać wyniku. Spróbuj za chwilę.'
+    };
+    err.textContent = map[data.error] || 'Nie udało się zapisać. Spróbuj jeszcze raz.';
+    err.hidden = false;
+  } catch (e2) {
+    err.textContent = 'Brak połączenia. Sprawdź internet i spróbuj ponownie.';
+    err.hidden = false;
+  } finally {
+    $('submit').disabled = false;
+    $('submit').textContent = 'Zapisz wynik';
+  }
+});
+
+load();
+</script>
+</body>
+</html>

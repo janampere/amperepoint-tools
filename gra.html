@@ -38,6 +38,7 @@
 <body>
 <canvas id="game"></canvas>
 <button id="fsbtn">Pełny ekran (F)</button>
+<script src="qrcode.js"></script>
 
 <script>
 "use strict";
@@ -741,6 +742,96 @@ let pendingRank = -1;
 const LS_KEY = 'ampere_rush_scores_v1';
 let scores = [];
 
+// --------------------------------------------------------- tablica zdalna
+// Online: wyniki sa wspolne dla calego stoiska, nick przychodzi z telefonu.
+// Offline: wszystko leci na lokalna tablice jak dotad. Padniete wifi na
+// targach nie moze oznaczac padnietego stanowiska.
+let remoteBoard = null;
+let remoteBoardAt = 0;
+let runCode = null;
+let runCodeErr = null;
+let qrCanvas = null;
+
+async function fetchBoard() {
+  if (performance.now() - remoteBoardAt < 12000) return;
+  remoteBoardAt = performance.now();
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 4000);
+    const r = await fetch('/api/board?limit=10', { signal: ctl.signal });
+    clearTimeout(t);
+    if (!r.ok) throw new Error('http');
+    const data = await r.json();
+    remoteBoard = Array.isArray(data.board) ? data.board : null;
+  } catch (e) {
+    remoteBoard = null;
+  }
+}
+
+function boardRows() {
+  if (remoteBoard && remoteBoard.length) {
+    return remoteBoard.map((r) => ({ name: r.nick, score: r.score }));
+  }
+  return scores.slice().sort((a, b) => b.score - a.score);
+}
+
+async function requestRunCode() {
+  runCode = null;
+  runCodeErr = null;
+  qrCanvas = null;
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 4000);
+    const r = await fetch('/api/run', {
+      method: 'POST',
+      signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        score: Math.floor(player.score),
+        distance: Math.floor(player.travelled / CFG.distDivisor),
+        pickups: player.pickups
+      })
+    });
+    clearTimeout(t);
+    if (!r.ok) throw new Error('http_' + r.status);
+    const data = await r.json();
+    if (!data.code) throw new Error('no_code');
+    runCode = data.code;
+    qrCanvas = makeQR(location.origin + '/w.html?c=' + data.code);
+    if (!qrCanvas) throw new Error('qr_failed');
+    remoteBoardAt = 0;   // tablica odswiezy sie zaraz po zapisie
+  } catch (e) {
+    runCodeErr = String(e.message || e);
+  }
+}
+
+// Kod QR rysujemy raz na offscreen canvas i tylko skalujemy przy rysowaniu.
+function makeQR(url) {
+  if (typeof qrcode !== 'function') return null;
+  try {
+    const q = qrcode(0, 'M');
+    q.addData(url);
+    q.make();
+    const n = q.getModuleCount();
+    const quiet = 4;
+    const size = n + quiet * 2;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const cx = c.getContext('2d');
+    cx.fillStyle = '#ffffff';
+    cx.fillRect(0, 0, size, size);
+    cx.fillStyle = '#121212';
+    for (let row = 0; row < n; row++) {
+      for (let col = 0; col < n; col++) {
+        if (q.isDark(row, col)) cx.fillRect(col + quiet, row + quiet, 1, 1);
+      }
+    }
+    return c;
+  } catch (e) {
+    return null;
+  }
+}
+
 function loadScores() {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -1175,7 +1266,7 @@ function renderControlsHint(cx, cy, u) {
 }
 
 function renderLeaderboard(cx, top, u, limit) {
-  const list = scores.slice().sort((a, b) => b.score - a.score).slice(0, limit || 5);
+  const list = boardRows().slice(0, limit || 5);
   const w = u * 44, x = cx - w / 2;
   text('NAJLEPSI KIEROWCY', cx, top, { size: u * 1.7, color: MUTED, align: 'center', spacing: 3.5 });
   const rowH = u * 3.8;
@@ -1235,6 +1326,12 @@ function renderAttract() {
                : IS_TOUCH ? 'GAZ JEDZIE SAM — TY TYLKO SKRĘCASZ'
                : 'PODŁĄCZ PAD I WCIŚNIJ DOWOLNY PRZYCISK';
   text(padTxt, W / 2, H * 0.965, { size: u * 1.5, color: Input.pad ? BLUE : MUTED, align: 'center', spacing: 1.5 });
+
+  // Sygnal dla obslugi stoiska, ze tablica zjechala na tryb lokalny.
+  if (!remoteBoard) {
+    text('TRYB OFFLINE — WYNIKI TYLKO NA TYM EKRANIE', u * 2, H * 0.965,
+         { size: u * 1.3, color: '#C9CED8', spacing: 1.5 });
+  }
 }
 
 function renderCountdown() {
@@ -1457,6 +1554,14 @@ function endRun() {
   Sfx.engineUpdate(0, false);
   player.best = Math.max(player.best, Math.floor(player.score));
   pendingRank = rankFor(Math.floor(player.score));
+  state = 'saving';
+  stateT = 0;
+  document.body.classList.remove('playing');
+  requestRunCode();
+}
+
+// Kod sie nie wyrobil - wracamy do trybu lokalnego z inicjalami na padzie.
+function fallbackToLocal() {
   if (pendingRank >= 0) {
     state = 'initials';
     initials = ['A', 'A', 'A'];
@@ -1465,7 +1570,6 @@ function endRun() {
     state = 'gameover';
   }
   stateT = 0;
-  document.body.classList.remove('playing');
 }
 
 function startRun() {
@@ -1519,7 +1623,77 @@ function frame(now) {
   if (state === 'attract') renderAttract();
   if (state === 'countdown') renderCountdown();
   if (state === 'gameover' || state === 'initials') renderGameOver();
+  if (state === 'saving' || state === 'qr') renderQR();
   if (isPortrait()) renderRotateHint();
+}
+
+function renderQR() {
+  const u = Math.min(W, H) / 100;
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = INK;
+  ctx.fillRect(0, H * 0.08, W, u * 8);
+  text('BATERIA NA ZERO', W / 2, H * 0.08 + u * 5.5,
+       { size: u * 4.6, color: PAPER, align: 'center', spacing: 4, weight: 700 });
+
+  // lewa kolumna: wynik
+  const lx = W * 0.28;
+  text('TWÓJ WYNIK', lx, H * 0.30, { size: u * 1.8, color: MUTED, align: 'center', spacing: 4 });
+  text(String(Math.floor(player.score)).padStart(6, '0'), lx, H * 0.44,
+       { size: u * 13, color: BRAND, align: 'center', mono: true, weight: 700 });
+
+  const stats = [
+    ['DYSTANS', Math.floor(player.travelled / CFG.distDivisor) + ' m'],
+    ['ŁADOWARKI', String(player.pickups)]
+  ];
+  const cw = u * 20, ch = u * 9;
+  stats.forEach((s, i) => {
+    const x = lx + (i - 0.5) * (cw + u * 2) - cw / 2;
+    ctx.fillStyle = GREY;
+    ctx.fillRect(x, H * 0.50, cw, ch);
+    text(s[0], x + cw / 2, H * 0.50 + u * 3, { size: u * 1.5, color: MUTED, align: 'center', spacing: 2 });
+    text(s[1], x + cw / 2, H * 0.50 + u * 7, { size: u * 3.2, color: INK, align: 'center', mono: true, weight: 700 });
+  });
+
+  // prawa kolumna: kod QR
+  const rx = W * 0.72;
+  const qs = Math.min(H * 0.34, W * 0.26);
+  const qx = rx - qs / 2, qy = H * 0.30;
+
+  text('ZESKANUJ TELEFONEM', rx, H * 0.255,
+       { size: u * 2.4, color: INK, align: 'center', spacing: 3, weight: 700 });
+
+  if (state === 'qr' && qrCanvas) {
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(qx - u, qy - u, qs + u * 2, qs + u * 2);
+    ctx.strokeStyle = INK; ctx.lineWidth = 1;
+    ctx.strokeRect(qx - u + 0.5, qy - u + 0.5, qs + u * 2 - 1, qs + u * 2 - 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(qrCanvas, qx, qy, qs, qs);
+    ctx.imageSmoothingEnabled = true;
+
+    text('KOD: ' + runCode, rx, qy + qs + u * 5,
+         { size: u * 3, color: INK, align: 'center', mono: true, spacing: 3, weight: 700 });
+    text('wpisz wynik na tablicę — nick i e-mail na swoim telefonie', rx, qy + qs + u * 8.6,
+         { size: u * 1.7, color: MUTED, align: 'center' });
+  } else {
+    ctx.fillStyle = GREY;
+    ctx.fillRect(qx, qy, qs, qs);
+    const dots = '.'.repeat(1 + Math.floor(performance.now() / 400) % 3);
+    text('ZAPISUJĘ' + dots, rx, qy + qs / 2,
+         { size: u * 2.6, color: MUTED, align: 'center', spacing: 2 });
+  }
+
+  // stopka
+  const left = Math.max(0, Math.ceil(75 - stateT));
+  const bw = u * 40, bh = u * 7, bx = W / 2 - bw / 2, by = H * 0.855;
+  ctx.fillStyle = Math.floor(performance.now() / 600) % 2 === 0 ? BRAND : INK;
+  ctx.fillRect(bx, by, bw, bh);
+  text('START — JESZCZE RAZ', W / 2, by + bh * 0.66,
+       { size: u * 2.8, color: PAPER, align: 'center', spacing: 3, weight: 700 });
+  text('kod działa przez dobę · powrót do ekranu startowego za ' + left + ' s',
+       W / 2, H * 0.965, { size: u * 1.6, color: MUTED, align: 'center' });
 }
 
 function isPortrait() { return IS_TOUCH && H > W * 1.05; }
@@ -1560,7 +1734,22 @@ function tick(dt) {
   switch (state) {
     case 'attract':
       updateAttractDemo(dt);
+      fetchBoard();
       if (Input.pressed('start') && !isPortrait()) startRun();
+      break;
+
+    case 'saving':
+      updateAttractDemo(dt * 0.35);
+      if (runCode) { state = 'qr'; stateT = 0; Sfx.ui(); }
+      else if (runCodeErr || stateT > 5) fallbackToLocal();
+      break;
+
+    case 'qr':
+      updateAttractDemo(dt * 0.35);
+      // Kod zyje dobe, wiec nie trzymamy przy nim kolejki - 75 s wystarczy,
+      // zeby wyciagnac telefon i zeskanowac.
+      if (Input.pressed('start') && stateT > 1.2) startRun();
+      if (stateT > 75) { state = 'attract'; stateT = 0; player.speed = maxSpeed * 0.4; }
       break;
 
     case 'countdown':
