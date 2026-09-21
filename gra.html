@@ -160,6 +160,35 @@ const COLORS = {
   charge: { road: '#26292F', grass: '#E9ECF1', rumble: BRAND, lane: '#FFB27A' }
 };
 
+// Pora roku zmienia sie z kazdym okrazeniem. Jezdnia, krawedz i cala
+// typografia zostaja bez zmian - rusza sie tylko krajobraz, zeby gra dalej
+// wygladala na materiał Ampere Point, a nie na kalendarz.
+const SEASONS = [
+  { name: 'WIOSNA', grass: '#E9F1E8', grassAlt: '#E2ECE1',
+    tree: 'rgba(74,140,86,0.34)', trunk: 'rgba(18,18,18,0.16)',
+    skyTop: '#DCE7F2', skyMid: '#EDF3F8', hill: 'rgba(74,140,86,0.16)' },
+  { name: 'LATO', grass: '#EDF2E6', grassAlt: '#E6EDDE',
+    tree: 'rgba(52,120,64,0.38)', trunk: 'rgba(18,18,18,0.18)',
+    skyTop: '#D5E6F5', skyMid: '#EBF3FA', hill: 'rgba(52,120,64,0.14)' },
+  { name: 'JESIEŃ', grass: '#F2EDE3', grassAlt: '#EDE6D9',
+    tree: 'rgba(186,116,45,0.36)', trunk: 'rgba(18,18,18,0.18)',
+    skyTop: '#E4DCEA', skyMid: '#F3EFF3', hill: 'rgba(186,116,45,0.16)' },
+  { name: 'ZIMA', grass: '#F4F7FA', grassAlt: '#EDF1F6',
+    tree: 'rgba(51,79,180,0.24)', trunk: 'rgba(18,18,18,0.14)',
+    skyTop: '#DCE3F2', skyMid: '#EDF1F8', hill: 'rgba(51,79,180,0.18)' }
+];
+let season = SEASONS[0];
+
+// Segmenty trzymaja referencje do obiektow z COLORS, wiec wystarczy
+// podmienic w nich kolor trawy - cala trasa zmienia sie w jednej klatce.
+function applySeason(level) {
+  season = SEASONS[(level - 1) % SEASONS.length];
+  COLORS.light.grass = season.grass;
+  COLORS.start.grass = season.grass;
+  COLORS.dark.grass = season.grassAlt;
+  COLORS.charge.grass = season.grassAlt;
+}
+
 // -------------------------------------------------------------------- audio
 const Sfx = {
   ctx: null, master: null, engine: null, engGain: null, engFilter: null,
@@ -537,9 +566,9 @@ function drawCone(ctx, x, y, w, h) {
 
 function drawTree(ctx, x, y, w, h) {
   // Plaska sylwetka w akcencie z motywu - tlo, nie bohater kadru.
-  ctx.fillStyle = 'rgba(18,18,18,0.16)';
+  ctx.fillStyle = season.trunk;
   ctx.fillRect(x + w * 0.45, y + h * 0.70, w * 0.10, h * 0.30);
-  ctx.fillStyle = 'rgba(51,79,180,0.26)';
+  ctx.fillStyle = season.tree;
   for (let i = 0; i < 3; i++) {
     const top = y + h * (0.02 + i * 0.22);
     const half = w * (0.22 + i * 0.13);
@@ -1000,6 +1029,7 @@ function resetRun() {
   player.pickups = 0;
   player.streak = 0;
   player.level = 1;
+  applySeason(1);
   player.lives = LIVES;
   player.endReason = 'battery';
   levelBanner = 0;
@@ -1094,16 +1124,16 @@ function renderSprite(sprite, scale, destX, destY, offsetX, offsetY, clipY, extr
 function renderSky() {
   const horizon = H * 0.5;
   const g = ctx.createLinearGradient(0, 0, 0, horizon + H * 0.1);
-  g.addColorStop(0, '#DCE3F2');
-  g.addColorStop(0.55, '#EDF1F8');
+  g.addColorStop(0, season.skyTop);
+  g.addColorStop(0.55, season.skyMid);
   g.addColorStop(1, PAPER);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, horizon + H * 0.14);
 
   // dalekie wzgorza - plaskie sylwetki w akcencie z motywu
   const hills = [
-    { c: 'rgba(51,79,180,0.14)', amp: 0.085, par: 0.45, step: 11, seed: 1.7 },
-    { c: 'rgba(51,79,180,0.22)', amp: 0.055, par: 0.8, step: 8, seed: 3.1 }
+    { c: season.hill, amp: 0.085, par: 0.45, step: 11, seed: 1.7 },
+    { c: season.hill, amp: 0.055, par: 0.8, step: 8, seed: 3.1 }
   ];
   hills.forEach((h) => {
     ctx.fillStyle = h.c;
@@ -1132,6 +1162,27 @@ function renderSky() {
   // linia horyzontu
   ctx.fillStyle = 'rgba(18,18,18,0.18)';
   ctx.fillRect(0, horizon, W, 1);
+}
+
+// Zima bez sniegu to tylko jasniejsza trawa. Platki lecą po torze zaleznym
+// od indeksu, wiec nie trzeba trzymac stanu miedzy klatkami.
+function renderSnow() {
+  if (season.name !== 'ZIMA') return;
+  const t = performance.now() * 0.001;
+  const drift = skyOffset * 0.35;
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  for (let i = 0; i < 60; i++) {
+    // Rozrzut z haszowania indeksu. Zwykly sin(i * krok) potrafi trafic w
+    // wielokrotnosci pi i ustawic wszystkie platki w jednym pasie.
+    const seed = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1;
+    const speed = 22 + (i % 7) * 9;
+    const x = (seed * W + Math.sin(t * 0.4 + i) * 18 - drift) % W;
+    const y = ((t * speed + seed * 900) % (H * 0.9));
+    const r = 1 + (i % 3) * 0.7;
+    ctx.beginPath();
+    ctx.arc(x < 0 ? x + W : x, y, r, 0, PI * 2);
+    ctx.fill();
+  }
 }
 
 let skyOffset = 0;
@@ -1233,6 +1284,7 @@ function render() {
     ctx.restore();
   }
 
+  renderSnow();
   ctx.restore();
 
   // --- bliski flash na zderzeniu / ladowaniu ---
@@ -1418,7 +1470,7 @@ function renderHUD() {
     } else {
       text('LEVEL ' + player.level, W / 2, by + u * 8,
            { size: u * 8, color: PAPER, align: 'center', spacing: 6, weight: 900 });
-      text('SZYBCIEJ · WIĘCEJ RUCHU · +' + (LEVEL.bonus * (player.level - 1)) + ' PKT',
+      text(season.name + ' · SZYBCIEJ · +' + (LEVEL.bonus * (player.level - 1)) + ' PKT',
            W / 2, by + u * 12.6, { size: u * 2, color: BRAND, align: 'center', spacing: 3 });
     }
     ctx.globalAlpha = 1;
@@ -1478,25 +1530,25 @@ function renderControlsHint(cx, cy, u) {
 // Nagroda stoi w tym samym wierszu co wynik - dopiero razem mowia, co sie
 // komu nalezy. Puste miejsca tez pokazuja nagrode, zeby rano, przy pustej
 // tablicy, bylo widac o co gra sie toczy.
+const PLACES = 7;
 const PRIZES = [
-  'Ładowarka serii Q',
-  'Ładowarka serii B',
-  'Ładowarka serii B',
-  'Dr. Storm',
-  'Dr. Storm',
-  'Dr. Storm',
-  'Dr. Storm'
+  { pos: '1', what: 'Ładowarka serii Q' },
+  { pos: '2-3', what: 'Ładowarka serii B' },
+  { pos: '4-7', what: 'Dr. Storm' }
 ];
+const ROW_H = (u) => u * 3.4;
+
+function panelFrame(x, top, w, u, rows) {
+  ctx.strokeStyle = INK; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, top + u * 2 + 0.5, w - 1, ROW_H(u) * rows - 1);
+}
 
 function renderLeaderboard(cx, top, u) {
   const rows = boardRows();
-  const w = u * 66, x = cx - w / 2;
-  const rowH = u * 3.4;
+  const w = u * 46, x = cx - w / 2, rowH = ROW_H(u);
+  text('NAJLEPSI KIEROWCY', cx, top, { size: u * 1.6, color: MUTED, align: 'center', spacing: 3 });
 
-  text('NAJLEPSI KIEROWCY', x + u * 1.6, top, { size: u * 1.6, color: MUTED, spacing: 3 });
-  text('NAGRODA', x + w * 0.545, top, { size: u * 1.6, color: MUTED, spacing: 3 });
-
-  PRIZES.forEach((prize, i) => {
+  for (let i = 0; i < PLACES; i++) {
     const s = rows[i];
     const ry = top + u * 2 + i * rowH;
     const first = i === 0;
@@ -1510,19 +1562,30 @@ function renderLeaderboard(cx, top, u) {
     text(String(i + 1), x + u * 1.6, y, { size: u * 1.9, color: dim, mono: true });
     if (s) {
       text(s.name, x + u * 5.5, y, { size: u * 2.1, color: col, mono: true, spacing: 2, weight: 700 });
-      if (s.level) text('LVL ' + s.level, x + w * 0.30, y, { size: u * 1.5, color: dim, spacing: 1.5 });
-      text(String(s.score).padStart(6, '0'), x + w * 0.51, y,
+      if (s.level) text('LVL ' + s.level, x + w * 0.52, y, { size: u * 1.5, color: dim, spacing: 1.5 });
+      text(String(s.score).padStart(6, '0'), x + w - u * 1.6, y,
            { size: u * 2.1, color: col, mono: true, align: 'right', weight: 600 });
     } else {
       text('wolne miejsce', x + u * 5.5, y, { size: u * 1.8, color: dim });
     }
-    text(prize, x + w * 0.545, y, { size: u * 1.9, color: col, weight: 600 });
-  });
+  }
+  panelFrame(x, top, w, u, PLACES);
+}
 
-  ctx.strokeStyle = INK; ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, top + u * 2 + 0.5, w - 1, rowH * PRIZES.length - 1);
-  ctx.fillStyle = 'rgba(18,18,18,0.18)';
-  ctx.fillRect(x + w * 0.53, top + u * 2, 1, rowH * PRIZES.length);
+function renderPrizes(cx, top, u) {
+  const w = u * 38, x = cx - w / 2, rowH = ROW_H(u);
+  text('NAGRODY', cx, top, { size: u * 1.6, color: MUTED, align: 'center', spacing: 3 });
+  PRIZES.forEach((p, i) => {
+    const ry = top + u * 2 + i * rowH;
+    if (i === 0) { ctx.fillStyle = BRAND; ctx.fillRect(x, ry, w, rowH); }
+    else if (i % 2 === 0) { ctx.fillStyle = GREY; ctx.fillRect(x, ry, w, rowH); }
+    const col = i === 0 ? PAPER : INK;
+    const y = ry + rowH * 0.72;
+    text(p.pos, x + u * 1.6, y,
+         { size: u * 1.9, color: i === 0 ? 'rgba(255,255,255,0.8)' : MUTED, mono: true });
+    text(p.what, x + u * 7, y, { size: u * 1.9, color: col, weight: 600 });
+  });
+  panelFrame(x, top, w, u, PRIZES.length);
 }
 
 function renderAttract() {
@@ -1550,7 +1613,8 @@ function renderAttract() {
   text('ELEKTRYCZNY WYŚCIG PO PRĄD', W / 2, H * 0.375,
        { size: u * 2.2, color: MUTED, align: 'center', spacing: 5 });
 
-  renderLeaderboard(W / 2, H * 0.40, u);
+  renderLeaderboard(W / 2 - u * 25, H * 0.40, u);
+  renderPrizes(W / 2 + u * 25, H * 0.40, u);
   text('zostaw e-mail po grze, żeby wziąć udział w losowaniu', W / 2, H * 0.705,
        { size: u * 1.6, color: MUTED, align: 'center' });
   renderControlsHint(W / 2, H * 0.765, u);
@@ -1712,6 +1776,7 @@ function hitSomething(penalty, msg, costLife) {
 
 function levelUp() {
   player.level++;
+  applySeason(player.level);
   player.score += LEVEL.bonus * (player.level - 1);
   levelBanner = player.level === OMODA_LEVEL ? 4 : 2.4;
 
