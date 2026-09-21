@@ -1453,11 +1453,25 @@ function renderControlsHint(cx, cy, u) {
     { g: 'RT', t: 'GAZ  ·  LT — HAMULEC' },
     { g: 'A', t: 'START / POTWIERDŹ' }
   ];
-  const gap = u * 24;
+  // Odstep liczony z szerokosci najdluzszego podpisu, bo przy waskim oknie
+  // staly rozstaw sklejal je w jeden ciag.
+  const SPACING = 1.5;
+  let fs = u * 1.5;
+  setFont(fs, 600);
+  // measureText nie uwzglednia rozstrzelenia liter, a przy 20 znakach
+  // dokłada ono wiecej niz caly margines - stad doliczamy je recznie.
+  const longest = Math.max(...items.map(
+    (it) => ctx.measureText(it.t).width + SPACING * it.t.length)) + u * 4;
+  let gap = Math.max(u * 24, longest);
+  const total = gap * 2 + longest;
+  if (total > W * 0.95) {
+    const k = (W * 0.95) / total;
+    gap *= k; fs *= k;
+  }
   items.forEach((it, i) => {
     const x = cx + (i - 1) * gap;
     padGlyph(x, cy, u * 3, it.g);
-    text(it.t, x, cy + u * 6, { size: u * 1.5, color: MUTED, align: 'center', spacing: 1.5 });
+    text(it.t, x, cy + u * 6, { size: fs, color: MUTED, align: 'center', spacing: SPACING });
   });
 }
 
@@ -1486,6 +1500,32 @@ function renderLeaderboard(cx, top, u, limit) {
   ctx.strokeRect(x + 0.5, top + u * 2 + 0.5, w - 1, rowH * list.length - 1);
 }
 
+// Nagrody stoja obok tablicy, bo dopiero razem tlumacza, po co grac.
+const PRIZES = [
+  { pos: '1', what: 'Ładowarka serii Q' },
+  { pos: '2-3', what: 'Ładowarka serii B' },
+  { pos: '4-7', what: 'Dr. Storm' }
+];
+
+function renderPrizes(cx, top, u) {
+  const w = u * 44, x = cx - w / 2;
+  text('NAGRODY', cx, top, { size: u * 1.7, color: MUTED, align: 'center', spacing: 3.5 });
+  const rowH = u * 3.8;
+  PRIZES.forEach((p, i) => {
+    const ry = top + u * 2 + i * rowH;
+    if (i === 0) { ctx.fillStyle = BRAND; ctx.fillRect(x, ry, w, rowH); }
+    else if (i % 2 === 0) { ctx.fillStyle = GREY; ctx.fillRect(x, ry, w, rowH); }
+    const col = i === 0 ? PAPER : INK;
+    const y = ry + rowH * 0.72;
+    text(p.pos, x + u * 1.6, y, { size: u * 2.1, color: i === 0 ? PAPER : MUTED, mono: true });
+    text(p.what, x + u * 8, y, { size: u * 2.1, color: col, weight: 600 });
+  });
+  ctx.strokeStyle = INK; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, top + u * 2 + 0.5, w - 1, rowH * PRIZES.length - 1);
+  text('zostaw e-mail po grze, żeby wziąć udział', cx, top + u * 2 + rowH * PRIZES.length + u * 3,
+       { size: u * 1.6, color: MUTED, align: 'center' });
+}
+
 function renderAttract() {
   const u = Math.min(W, H) / 100;
   ctx.fillStyle = 'rgba(255,255,255,0.86)';
@@ -1511,7 +1551,8 @@ function renderAttract() {
   text('ELEKTRYCZNY WYŚCIG PO PRĄD', W / 2, H * 0.375,
        { size: u * 2.2, color: MUTED, align: 'center', spacing: 5 });
 
-  renderLeaderboard(W / 2, H * 0.44, u, 5);
+  renderLeaderboard(W / 2 - u * 24, H * 0.44, u, 5);
+  renderPrizes(W / 2 + u * 24, H * 0.44, u);
   renderControlsHint(W / 2, H * 0.755, u);
 
   // wezwanie do startu: pelny prostokat w kolorze marki
