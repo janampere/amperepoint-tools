@@ -398,33 +398,62 @@ function drawCar(ctx, x, y, w, h, c, opts) {
   }
 }
 
-function drawPylon(ctx, x, y, w, h, t) {
+// Slupek z ladowarka - wspolna podstawa dla obu produktow.
+function drawStand(ctx, x, y, w, h, t) {
   const pulse = 0.5 + 0.5 * Math.sin(t * 0.006);
-  // pulsujacy znacznik na ziemi zamiast poswiaty - plasko, bez gradientu
   ctx.globalAlpha = 0.25 + 0.35 * pulse;
   ctx.fillStyle = BRAND;
   ctx.fillRect(x - w * 0.25, y + h * 0.95, w * 1.5, h * 0.05);
   ctx.globalAlpha = 1;
-  // slup: bialy wallbox na ciemnej podstawie
   ctx.fillStyle = INK;
-  ctx.fillRect(x + w * 0.20, y + h * 0.90, w * 0.60, h * 0.10);
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(x + w * 0.34, y + h * 0.34, w * 0.32, h * 0.58);
-  ctx.fillStyle = LINE;
-  ctx.fillRect(x + w * 0.34, y + h * 0.34, w * 0.04, h * 0.58);
-  // glowica w kolorze marki
+  ctx.fillRect(x + w * 0.20, y + h * 0.90, w * 0.60, h * 0.10);   // podstawa
+  ctx.fillStyle = '#C9CED8';
+  ctx.fillRect(x + w * 0.40, y + h * 0.45, w * 0.20, h * 0.47);   // slup
+}
+
+function label(ctx, txt, cx, y, w, size) {
+  if (w < 54) return;
+  ctx.fillStyle = INK;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 ' + Math.floor(size) + 'px Geist, Arial, sans-serif';
+  ctx.fillText(txt, cx, y);
+}
+
+// Wallbox PRIME: czarna obudowa, kolorowy wyswietlacz, kabel Type 2 w kaburze.
+function drawPrime(ctx, x, y, w, h, t) {
+  drawStand(ctx, x, y, w, h, t);
+  const bx = x + w * 0.14, bw = w * 0.72, by = y + h * 0.04, bh = h * 0.42;
+  ctx.fillStyle = INK;
+  ctx.fillRect(bx, by, bw, bh);
+  // wyswietlacz
+  ctx.fillStyle = '#2E3440';
+  ctx.fillRect(bx + bw * 0.14, by + bh * 0.12, bw * 0.72, bh * 0.44);
   ctx.fillStyle = BRAND;
-  ctx.fillRect(x + w * 0.16, y, w * 0.68, h * 0.38);
-  // blyskawica
-  ctx.fillStyle = PAPER;
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.56, y + h * 0.06);
-  ctx.lineTo(x + w * 0.34, y + h * 0.21);
-  ctx.lineTo(x + w * 0.47, y + h * 0.21);
-  ctx.lineTo(x + w * 0.42, y + h * 0.33);
-  ctx.lineTo(x + w * 0.66, y + h * 0.17);
-  ctx.lineTo(x + w * 0.52, y + h * 0.17);
-  ctx.closePath(); ctx.fill();
+  ctx.fillRect(bx + bw * 0.14, by + bh * 0.66, bw * 0.72, bh * 0.14);
+  // kabura z zlaczem Type 2 z boku
+  ctx.fillStyle = '#4A505C';
+  ctx.fillRect(bx + bw, by + bh * 0.28, w * 0.10, bh * 0.34);
+  label(ctx, 'PRIME', x + w * 0.5, y + h * 0.56, w, w * 0.17);
+}
+
+// Q11: przenosna, srebrna obudowa, wyswietlacz i czerwona wtyczka CEE.
+function drawQ11(ctx, x, y, w, h, t) {
+  drawStand(ctx, x, y, w, h, t);
+  const bx = x + w * 0.22, bw = w * 0.56, by = y + h * 0.10, bh = h * 0.32;
+  ctx.fillStyle = '#D7DBE2';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = '#A8AEB9';
+  ctx.fillRect(bx, by, bw * 0.12, bh);
+  // ekran
+  ctx.fillStyle = INK;
+  ctx.fillRect(bx + bw * 0.22, by + bh * 0.18, bw * 0.62, bh * 0.44);
+  // kabel z czerwona wtyczka CEE
+  ctx.fillStyle = '#4A505C';
+  ctx.fillRect(bx + bw * 0.42, by + bh, bw * 0.16, h * 0.10);
+  ctx.fillStyle = '#C2401F';
+  ctx.fillRect(bx + bw * 0.30, by + bh + h * 0.10, bw * 0.40, h * 0.07);
+  label(ctx, 'Q11', x + w * 0.5, y + h * 0.56, w, w * 0.17);
 }
 
 function drawCone(ctx, x, y, w, h) {
@@ -517,7 +546,8 @@ function drawGantry(ctx, x, y, w, h) {
 
 // Kazdy sprite: szerokosc/wysokosc w jednostkach swiata (roadWidth = 2000).
 const SPR = {
-  pylon:     { w: 720,  h: 1250, draw: drawPylon, collect: true },
+  prime:     { w: 760,  h: 1250, draw: drawPrime, collect: true },
+  q11:       { w: 700,  h: 1250, draw: drawQ11, collect: true },
   cone:      { w: 330,  h: 380,  draw: drawCone, hazard: true },
   tree:      { w: 2100, h: 3000, draw: drawTree },
   treeS:     { w: 1500, h: 2100, draw: drawTree },
@@ -615,11 +645,13 @@ function addScenery() {
     if (i % 180 === 40) s.sprites.push({ sprite: SPR.billboard, offset: (Math.random() < 0.5 ? -1 : 1) * 1.9 });
     if (i % 260 === 90) s.sprites.push({ sprite: SPR.gantry, offset: 0 });
   }
-  // ladowarki + pachołki na jezdni
+  // ladowarki + pachołki na jezdni; produkty lecą na przemian
   let i = 120;
+  let alt = 0;
   while (i < n - 120) {
     const lane = pick([-0.62, 0, 0.62]);
-    segments[i].sprites.push({ sprite: SPR.pylon, offset: lane, kind: 'pickup', takenAt: -1e9 });
+    const charger = (alt++ % 2 === 0) ? SPR.prime : SPR.q11;
+    segments[i].sprites.push({ sprite: charger, offset: lane, kind: 'pickup', takenAt: -1e9 });
     // czasem pachołek w innym pasie tuz obok - zmusza do wyboru toru
     if (Math.random() < 0.55) {
       const other = pick([-0.62, 0, 0.62].filter((l) => l !== lane));
@@ -1461,7 +1493,9 @@ function collectPylon(sp) {
   player.score += pts;
   player.battery = Math.min(100, player.battery + 22);
   player.flashBrand = 0.9;
-  addPopup('+' + pts, BRAND, m > 1);
+  // Nazwa produktu w popupie - gracz przy okazji zapamietuje, co zbiera.
+  const name = sp.sprite === SPR.prime ? 'PRIME' : 'Q11';
+  addPopup(name + ' +' + pts, BRAND, m > 1);
   Sfx.pickup(player.streak);
 }
 
