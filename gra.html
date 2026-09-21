@@ -128,6 +128,22 @@ const offRoadDecel = -maxSpeed / 2.2;
 const offRoadLimit = maxSpeed / 3.4;
 const PLAYER_W = 1000;
 
+// Kazde okrazenie to nowy poziom. Rosnie predkosc, ruch i zuzycie pradu,
+// a na trasie budza sie pachołki uspione na starcie - zeby po kilku
+// minutach nie dalo sie jechac z palcem w nosie.
+const LEVEL = {
+  speedStep: 0.07, speedMax: 1.55,
+  carsStep: 3, carsMax: 30,
+  drainStep: 0.12, drainMax: 1.8,
+  bonus: 1000
+};
+function speedCap() {
+  return maxSpeed * Math.min(LEVEL.speedMax, 1 + (player.level - 1) * LEVEL.speedStep);
+}
+function drainScale() {
+  return Math.min(LEVEL.drainMax, 1 + (player.level - 1) * LEVEL.drainStep);
+}
+
 const COLORS = {
   light:  { road: '#22252B', grass: '#EEF0F4', rumble: '#E4E7EC', lane: PAPER },
   dark:   { road: '#1C1F24', grass: '#E9ECF1', rumble: BRAND },
@@ -223,6 +239,9 @@ const Sfx = {
   },
   crash() { this.noise(0.35, 0.4, 320); this.blip(90, 0.3, 'sawtooth', 0.25); },
   ui() { this.blip(520, 0.07, 'square', 0.18); },
+  levelUp() {
+    [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.blip(f, 0.18, 'square', 0.26), i * 90));
+  },
   start3() { this.blip(440, 0.18, 'square', 0.25); },
   start1() { this.blip(880, 0.4, 'square', 0.3); },
   gameover() {
@@ -694,10 +713,20 @@ function addScenery() {
       const other = pick([-0.62, 0, 0.62].filter((l) => l !== lane));
       segments[i + rndInt(4, 14)].sprites.push({ sprite: SPR.cone, offset: other, kind: 'cone' });
     }
+    // Dodatkowe przeszkody czekaja na wyzsze poziomy - ta sama trasa
+    // robi sie wtedy ciasniejsza, bez przebudowywania jej w locie.
+    for (const lvl of [2, 3, 4]) {
+      if (Math.random() < 0.5) {
+        const seg = segments[i + rndInt(20, 110)];
+        if (seg) seg.sprites.push({ sprite: SPR.cone, offset: pick([-0.62, 0, 0.62]), kind: 'cone', minLevel: lvl });
+      }
+    }
     i += rndInt(140, 260);
   }
 }
 
+// Dlugosc trasy wynika z tego, ze okrazenie konczy poziom: przy ~45 s
+// nawet sredni gracz zobaczy LEVEL 2, a dobry dojedzie do 4-5.
 function buildTrack() {
   segments = [];
   addStraight(ROAD.LENGTH.SHORT);
@@ -705,23 +734,11 @@ function buildTrack() {
   addSCurves();
   addCurve(ROAD.LENGTH.MEDIUM, ROAD.CURVE.MEDIUM, ROAD.HILL.LOW);
   addBumps();
-  addLowRollingHills();
-  addCurve(ROAD.LENGTH.LONG, ROAD.CURVE.MEDIUM, ROAD.HILL.MEDIUM);
-  addStraight();
+  addCurve(ROAD.LENGTH.LONG, -ROAD.CURVE.MEDIUM, ROAD.HILL.MEDIUM);
   addHill(ROAD.LENGTH.MEDIUM, ROAD.HILL.HIGH);
-  addSCurves();
-  addCurve(ROAD.LENGTH.LONG, -ROAD.CURVE.MEDIUM, ROAD.HILL.NONE);
-  addHill(ROAD.LENGTH.LONG, ROAD.HILL.HIGH);
-  addCurve(ROAD.LENGTH.LONG, ROAD.CURVE.MEDIUM, -ROAD.HILL.LOW);
-  addBumps();
-  addHill(ROAD.LENGTH.LONG, -ROAD.HILL.MEDIUM);
-  addStraight();
-  addSCurves();
-  addCurve(ROAD.LENGTH.MEDIUM, -ROAD.CURVE.HARD, ROAD.HILL.LOW);
-  addLowRollingHills();
   addStraight(ROAD.LENGTH.SHORT);
   // wyrownanie do zera zeby petla sie zgadzala
-  addRoad(200, 200, 200, 0, -lastY() / CFG.segmentLength);
+  addRoad(150, 150, 150, ROAD.CURVE.EASY, -lastY() / CFG.segmentLength);
   addScenery();
   trackLength = segments.length * CFG.segmentLength;
 }
@@ -795,9 +812,10 @@ function carSteer(car, carSeg, playerSeg, playerW) {
 // ----------------------------------------------------------------- stan gry
 const player = {
   x: 0, speed: 0, position: 0, travelled: 0,
-  battery: 100, score: 0, pickups: 0, streak: 0, best: 0,
+  battery: 100, score: 0, pickups: 0, streak: 0, best: 0, level: 1,
   hitCooldown: 0, shake: 0, flashBrand: 0, flashRed: 0
 };
+let levelBanner = 0;
 
 let state = 'attract';   // attract | countdown | play | gameover | initials
 let stateT = 0;
@@ -858,7 +876,8 @@ async function requestRunCode() {
       body: JSON.stringify({
         score: Math.floor(player.score),
         distance: Math.floor(player.travelled / CFG.distDivisor),
-        pickups: player.pickups
+        pickups: player.pickups,
+        level: player.level
       })
     });
     clearTimeout(t);
@@ -934,6 +953,8 @@ function resetRun() {
   player.score = 0;
   player.pickups = 0;
   player.streak = 0;
+  player.level = 1;
+  levelBanner = 0;
   player.hitCooldown = 0;
   player.shake = 0;
   player.flashBrand = 0;
@@ -1133,6 +1154,7 @@ function render() {
     }
 
     for (const sp of seg.sprites) {
+      if (sp.minLevel && player.level < sp.minLevel) continue;
       if (sp.kind === 'pickup' && now - sp.takenAt < 9000) continue;
       renderSprite(sp.sprite, seg.p1.screen.scale,
                    seg.p1.screen.x + seg.p1.screen.w * sp.offset,
@@ -1235,6 +1257,14 @@ function renderHUD() {
   text('BATERIA ' + Math.ceil(player.battery) + '%', pad + u * 27.5, u * 9.5,
        { size: u * 1.9, color: player.battery < 25 ? '#D93025' : MUTED, mono: true, weight: 600 });
 
+  // poziom
+  const lvW = u * 13, lvX = pad + u * 46;
+  ctx.fillStyle = INK;
+  ctx.fillRect(lvX, u * 2.4, lvW, u * 7.4);
+  text('LEVEL', lvX + lvW / 2, u * 5, { size: u * 1.4, color: '#9AA3B2', align: 'center', spacing: 2 });
+  text(String(player.level), lvX + lvW / 2, u * 8.6,
+       { size: u * 3.6, color: PAPER, align: 'center', mono: true, weight: 700 });
+
   // wynik
   text('WYNIK', W - pad, u * 3.6, { size: u * 1.6, color: MUTED, align: 'right', spacing: 2.5 });
   text(String(Math.floor(player.score)).padStart(6, '0'), W - pad, u * 9.6,
@@ -1294,6 +1324,23 @@ function renderHUD() {
       ctx.fillRect(x - s / 2, H * 0.62 - s / 2, s, s);
       text(g, x, H * 0.62 + u * 2.2, { size: u * 6, color: active ? PAPER : INK, align: 'center' });
     });
+    ctx.globalAlpha = 1;
+  }
+
+  // baner awansu
+  if (levelBanner > 0) {
+    const p = clamp(levelBanner / 2.4, 0, 1);
+    const slide = (1 - Math.min(1, (2.4 - levelBanner) * 4)) * u * 8;
+    ctx.globalAlpha = Math.min(1, p * 2.5);
+    const bh = u * 16, by = H * 0.30 + slide;
+    ctx.fillStyle = INK;
+    ctx.fillRect(0, by, W, bh);
+    ctx.fillStyle = BRAND;
+    ctx.fillRect(0, by + bh - u * 1.2, W, u * 1.2);
+    text('LEVEL ' + player.level, W / 2, by + u * 8,
+         { size: u * 8, color: PAPER, align: 'center', spacing: 6, weight: 900 });
+    text('SZYBCIEJ · WIĘCEJ RUCHU · +' + (LEVEL.bonus * (player.level - 1)) + ' PKT',
+         W / 2, by + u * 12.6, { size: u * 2, color: BRAND, align: 'center', spacing: 3 });
     ctx.globalAlpha = 1;
   }
 
@@ -1444,8 +1491,8 @@ function renderGameOver() {
 
   const stats = [
     ['DYSTANS', Math.floor(player.travelled / CFG.distDivisor) + ' m'],
-    ['ŁADOWARKI', String(player.pickups)],
-    ['REKORD', String(Math.max(player.best, Math.floor(player.score)))]
+    ['POZIOM', String(player.level)],
+    ['ŁADOWARKI', String(player.pickups)]
   ];
   const cw = u * 22, ch = u * 9;
   stats.forEach((s, i) => {
@@ -1521,6 +1568,27 @@ function hitSomething(penalty, msg) {
   if (msg) addPopup(msg, '#ff6b6b', true);
 }
 
+function levelUp() {
+  player.level++;
+  player.score += LEVEL.bonus * (player.level - 1);
+  levelBanner = 2.4;
+
+  // dokladamy ruchu, ale nie przestawiamy aut juz na trasie
+  const target = Math.min(LEVEL.carsMax, 14 + (player.level - 1) * LEVEL.carsStep);
+  while (cars.length < target) {
+    const car = {
+      offset: rnd(-0.75, 0.75),
+      z: Math.floor(Math.random() * segments.length) * CFG.segmentLength,
+      speed: rnd(maxSpeed / 5, maxSpeed / 2.1),
+      skin: pick(CAR_SKINS),
+      w: 980
+    };
+    cars.push(car);
+    findSegment(car.z).cars.push(car);
+  }
+  Sfx.levelUp();
+}
+
 function collectPylon(sp) {
   sp.takenAt = performance.now();
   player.streak++;
@@ -1547,7 +1615,7 @@ function updatePlay(dt) {
 
   // gaz / hamulec
   if (Input.accel > 0.05) {
-    player.speed = accelToward(player.speed, maxSpeed * Input.accel, accelRate, dt);
+    player.speed = accelToward(player.speed, speedCap() * Input.accel, accelRate, dt);
   } else if (Input.brake > 0.05) {
     player.speed = Math.max(0, player.speed + brakeRate * dt * Input.brake);
   } else {
@@ -1578,6 +1646,7 @@ function updatePlay(dt) {
   // sprite'y na jezdni
   const now = performance.now();
   for (const sp of playerSegment.sprites) {
+    if (sp.minLevel && player.level < sp.minLevel) continue;
     const halfW = sp.sprite.w / CFG.roadWidth;
     if (!overlap(player.x, PLAYER_W / CFG.roadWidth, sp.offset, halfW, 0.8)) continue;
     if (sp.kind === 'pickup') {
@@ -1587,16 +1656,17 @@ function updatePlay(dt) {
     }
   }
 
-  // ruch do przodu
+  // ruch do przodu; przewiniecie sie trasy = koniec okrazenia
   const ds = dt * player.speed;
+  const before = player.position;
   player.position = (player.position + ds) % trackLength;
+  if (player.position < before) levelUp();
   player.travelled += ds;
   player.score += ds / CFG.distDivisor;
   skyOffset += (playerSegment.curve * speedPct * dt * 220) + speedPct * dt * 4;
 
   // bateria: jazda kosztuje prad
-  const drainScale = 1 + Math.min(0.4, player.travelled / (CFG.distDivisor * 9000));
-  player.battery -= (0.8 + 2.7 * speedPct) * drainScale * dt;
+  player.battery -= (0.8 + 2.7 * speedPct) * drainScale() * dt;
 
   updateCars(dt, playerSegment, PLAYER_W);
   Sfx.engineUpdate(speedPct, offRoad);
@@ -1716,11 +1786,12 @@ function renderQR() {
 
   const stats = [
     ['DYSTANS', Math.floor(player.travelled / CFG.distDivisor) + ' m'],
+    ['POZIOM', String(player.level)],
     ['ŁADOWARKI', String(player.pickups)]
   ];
-  const cw = u * 20, ch = u * 9;
+  const cw = u * 13, ch = u * 9;
   stats.forEach((s, i) => {
-    const x = lx + (i - 0.5) * (cw + u * 2) - cw / 2;
+    const x = lx + (i - 1) * (cw + u * 1.5) - cw / 2;
     ctx.fillStyle = GREY;
     ctx.fillRect(x, H * 0.50, cw, ch);
     text(s[0], x + cw / 2, H * 0.50 + u * 3, { size: u * 1.5, color: MUTED, align: 'center', spacing: 2 });
@@ -1799,6 +1870,7 @@ function tick(dt) {
   player.flashBrand = Math.max(0, player.flashBrand - dt * 3);
   popups.forEach((p) => { p.life -= dt * 1.1; p.y -= dt * 60; });
   popups = popups.filter((p) => p.life > 0);
+  if (state === 'play') levelBanner = Math.max(0, levelBanner - dt);
 
   if (Input.pressed('mute')) Sfx.toggle();
 

@@ -17,7 +17,7 @@
  */
 
 var SHEET_NAME = 'Leady';
-var HEADERS = ['Data zapisu', 'Nick', 'E-mail', 'Zgoda', 'Wynik', 'Dystans (m)',
+var HEADERS = ['Data zapisu', 'Nick', 'E-mail', 'Zgoda', 'Wynik', 'Dystans (m)', 'Poziom',
                'Ładowarki', 'Kod przejazdu', 'Rozegrano', 'Wydarzenie'];
 
 function doPost(e) {
@@ -31,6 +31,7 @@ function doPost(e) {
       data.consent ? 'TAK' : 'NIE',
       Number(data.score) || 0,
       Number(data.distance) || 0,
+      Number(data.level) || 1,
       Number(data.pickups) || 0,
       data.code || '',
       data.playedAt || '',

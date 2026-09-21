@@ -49,6 +49,7 @@ async function toPipedrive(entry) {
   await call('/notes', {
     content: 'Ampere Rush (' + EVENT_TAG + ')<br>Nick: ' + entry.nick +
              '<br>Wynik: ' + entry.score + '<br>Dystans: ' + entry.distance + ' m' +
+             '<br>Poziom: ' + entry.level +
              '<br>Ładowarki: ' + entry.pickups,
     person_id: personId,
     lead_id: leadId || undefined
@@ -91,7 +92,7 @@ async function handler(req, res) {
   const entry = {
     code, nick,
     score: run.score, distance: run.distance, pickups: run.pickups,
-    playedAt: run.playedAt, claimedAt: new Date().toISOString()
+    level: run.level || 1, playedAt: run.playedAt, claimedAt: new Date().toISOString()
   };
 
   // Najpierw tablica - to jest to, po co gracz stoi przy ekranie.

@@ -16,7 +16,7 @@ async function handler(req, res) {
     if (!run) return json(res, 404, { error: 'unknown_code' });
     return json(res, 200, {
       score: run.score, distance: run.distance, pickups: run.pickups,
-      initials: run.initials, claimed: Boolean(run.claimed), nick: run.nick || ''
+      level: run.level || 1, initials: run.initials, claimed: Boolean(run.claimed), nick: run.nick || ''
     });
   }
 
@@ -26,12 +26,13 @@ async function handler(req, res) {
   const score = Math.max(0, Math.min(9999999, Math.floor(Number(b.score) || 0)));
   const distance = Math.max(0, Math.min(9999999, Math.floor(Number(b.distance) || 0)));
   const pickups = Math.max(0, Math.min(9999, Math.floor(Number(b.pickups) || 0)));
+  const level = Math.max(1, Math.min(999, Math.floor(Number(b.level) || 1)));
   const initials = String(b.initials || '').replace(/[^A-Z0-9\-]/gi, '').slice(0, 3).toUpperCase();
 
   const code = makeCode();
   try {
     await saveRun(code, {
-      code, score, distance, pickups, initials,
+      code, score, distance, pickups, level, initials,
       playedAt: new Date().toISOString(),
       claimed: false
     });
