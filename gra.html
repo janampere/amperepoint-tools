@@ -1531,10 +1531,15 @@ function renderControlsHint(cx, cy, u) {
 // komu nalezy. Puste miejsca tez pokazuja nagrode, zeby rano, przy pustej
 // tablicy, bylo widac o co gra sie toczy.
 const PLACES = 7;
+// Po jednym wierszu na miejsce, zeby rzedy obu tabel sie pokrywaly.
 const PRIZES = [
-  { pos: '1', what: 'Ładowarka serii Q' },
-  { pos: '2-3', what: 'Ładowarka serii B' },
-  { pos: '4-7', what: 'Dr. Storm' }
+  'Ładowarka serii Q',
+  'Ładowarka serii B',
+  'Ładowarka serii B',
+  'Dr. Storm',
+  'Dr. Storm',
+  'Dr. Storm',
+  'Dr. Storm'
 ];
 const ROW_H = (u) => u * 3.4;
 
@@ -1575,15 +1580,15 @@ function renderLeaderboard(cx, top, u) {
 function renderPrizes(cx, top, u) {
   const w = u * 38, x = cx - w / 2, rowH = ROW_H(u);
   text('NAGRODY', cx, top, { size: u * 1.6, color: MUTED, align: 'center', spacing: 3 });
-  PRIZES.forEach((p, i) => {
+  PRIZES.forEach((what, i) => {
     const ry = top + u * 2 + i * rowH;
-    if (i === 0) { ctx.fillStyle = BRAND; ctx.fillRect(x, ry, w, rowH); }
+    const first = i === 0;
+    if (first) { ctx.fillStyle = BRAND; ctx.fillRect(x, ry, w, rowH); }
     else if (i % 2 === 0) { ctx.fillStyle = GREY; ctx.fillRect(x, ry, w, rowH); }
-    const col = i === 0 ? PAPER : INK;
     const y = ry + rowH * 0.72;
-    text(p.pos, x + u * 1.6, y,
-         { size: u * 1.9, color: i === 0 ? 'rgba(255,255,255,0.8)' : MUTED, mono: true });
-    text(p.what, x + u * 7, y, { size: u * 1.9, color: col, weight: 600 });
+    text(String(i + 1), x + u * 1.6, y,
+         { size: u * 1.9, color: first ? 'rgba(255,255,255,0.8)' : MUTED, mono: true });
+    text(what, x + u * 6, y, { size: u * 1.9, color: first ? PAPER : INK, weight: 600 });
   });
   panelFrame(x, top, w, u, PRIZES.length);
 }
