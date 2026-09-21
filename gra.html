@@ -92,6 +92,18 @@ let logoReady = false;
 logoImg.onload = () => { logoReady = true; };
 logoImg.src = LOGO_URL;
 
+// Zdjecia produktowe prosto ze sklepu. Parametr width zalatwia CDN Shopify -
+// nie ma po co ciagnac na stoisko plikow po kilka MB.
+function loadImg(src) {
+  const ref = { img: new Image(), ready: false };
+  ref.img.decoding = 'async';
+  ref.img.onload = () => { ref.ready = ref.img.naturalWidth > 0; };
+  ref.img.src = src;
+  return ref;
+}
+const imgPrime = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Wallbox_MAIN_23_2c3bb7e1-da33-45ed-bcdb-d729a42035f4.jpg?v=1787313349&width=320');
+const imgQ11 = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Q11_2ba5f7ed-4505-43b8-b2cc-928fbe90ddc7.png?v=1788339617&width=320');
+
 const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
 const CFG = {
   segmentLength: 200,
@@ -411,49 +423,74 @@ function drawStand(ctx, x, y, w, h, t) {
   ctx.fillRect(x + w * 0.40, y + h * 0.45, w * 0.20, h * 0.47);   // slup
 }
 
-function label(ctx, txt, cx, y, w, size) {
-  if (w < 54) return;
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '700 ' + Math.floor(size) + 'px Geist, Arial, sans-serif';
-  ctx.fillText(txt, cx, y);
-}
-
-// Wallbox PRIME: czarna obudowa, kolorowy wyswietlacz, kabel Type 2 w kaburze.
-function drawPrime(ctx, x, y, w, h, t) {
+// Ekspozytor przy trasie: biala kartka ze zdjeciem produktu i podpisem.
+// Zdjecia produktowe maja jasne tlo, wiec kartka jest dla nich naturalna
+// oprawa - inaczej wisialby w powietrzu bialy prostokat.
+function drawProductStand(ctx, x, y, w, h, t, ref, name, fallback) {
   drawStand(ctx, x, y, w, h, t);
-  const bx = x + w * 0.14, bw = w * 0.72, by = y + h * 0.04, bh = h * 0.42;
-  ctx.fillStyle = INK;
-  ctx.fillRect(bx, by, bw, bh);
-  // wyswietlacz
-  ctx.fillStyle = '#2E3440';
-  ctx.fillRect(bx + bw * 0.14, by + bh * 0.12, bw * 0.72, bh * 0.44);
+
+  const cw = w * 0.94, cx = x + (w - cw) / 2, cy = y, chh = h * 0.46;
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(cx, cy, cw, chh);
+
+  const barH = chh * 0.20;
+  const pad = cw * 0.07;
+  const ix = cx + pad, iy = cy + pad;
+  const iw = cw - pad * 2, ih = chh - barH - pad * 1.6;
+
+  if (ref.ready) {
+    // Zdjecia sklepowe maja spory bialy margines, a produkt ma byc czytelny
+    // z daleka - stad lekkie przyblizenie i przyciecie do kartki.
+    const ar = ref.img.naturalWidth / ref.img.naturalHeight;
+    let dw = iw, dh = iw / ar;
+    if (dh > ih) { dh = ih; dw = ih * ar; }
+    dw *= 1.2; dh *= 1.2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ix, iy, iw, ih);
+    ctx.clip();
+    ctx.drawImage(ref.img, ix + (iw - dw) / 2, iy + (ih - dh) / 2, dw, dh);
+    ctx.restore();
+  } else {
+    fallback(ctx, ix, iy, iw, ih);
+  }
+
   ctx.fillStyle = BRAND;
-  ctx.fillRect(bx + bw * 0.14, by + bh * 0.66, bw * 0.72, bh * 0.14);
-  // kabura z zlaczem Type 2 z boku
-  ctx.fillStyle = '#4A505C';
-  ctx.fillRect(bx + bw, by + bh * 0.28, w * 0.10, bh * 0.34);
-  label(ctx, 'PRIME', x + w * 0.5, y + h * 0.56, w, w * 0.17);
+  ctx.fillRect(cx, cy + chh - barH, cw, barH);
+  if (cw > 54) {
+    ctx.fillStyle = PAPER;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 ' + Math.floor(barH * 0.62) + 'px Geist, Arial, sans-serif';
+    ctx.fillText(name, cx + cw / 2, cy + chh - barH * 0.46);
+  }
 }
 
-// Q11: przenosna, srebrna obudowa, wyswietlacz i czerwona wtyczka CEE.
-function drawQ11(ctx, x, y, w, h, t) {
-  drawStand(ctx, x, y, w, h, t);
-  const bx = x + w * 0.22, bw = w * 0.56, by = y + h * 0.10, bh = h * 0.32;
-  ctx.fillStyle = '#D7DBE2';
-  ctx.fillRect(bx, by, bw, bh);
-  ctx.fillStyle = '#A8AEB9';
-  ctx.fillRect(bx, by, bw * 0.12, bh);
-  // ekran
+// Rysunki zapasowe - gdy zdjecie ze sklepu nie dojedzie.
+function primeIcon(ctx, x, y, w, h) {
   ctx.fillStyle = INK;
-  ctx.fillRect(bx + bw * 0.22, by + bh * 0.18, bw * 0.62, bh * 0.44);
-  // kabel z czerwona wtyczka CEE
-  ctx.fillStyle = '#4A505C';
-  ctx.fillRect(bx + bw * 0.42, by + bh, bw * 0.16, h * 0.10);
+  ctx.fillRect(x + w * 0.18, y, w * 0.64, h);
+  ctx.fillStyle = '#2E3440';
+  ctx.fillRect(x + w * 0.28, y + h * 0.12, w * 0.44, h * 0.42);
+  ctx.fillStyle = BRAND;
+  ctx.fillRect(x + w * 0.28, y + h * 0.62, w * 0.44, h * 0.14);
+}
+
+function q11Icon(ctx, x, y, w, h) {
+  ctx.fillStyle = '#D7DBE2';
+  ctx.fillRect(x + w * 0.22, y + h * 0.10, w * 0.56, h * 0.58);
+  ctx.fillStyle = INK;
+  ctx.fillRect(x + w * 0.32, y + h * 0.22, w * 0.36, h * 0.28);
   ctx.fillStyle = '#C2401F';
-  ctx.fillRect(bx + bw * 0.30, by + bh + h * 0.10, bw * 0.40, h * 0.07);
-  label(ctx, 'Q11', x + w * 0.5, y + h * 0.56, w, w * 0.17);
+  ctx.fillRect(x + w * 0.36, y + h * 0.78, w * 0.28, h * 0.16);
+}
+
+function drawPrime(ctx, x, y, w, h, t) {
+  drawProductStand(ctx, x, y, w, h, t, imgPrime, 'PRIME', primeIcon);
+}
+
+function drawQ11(ctx, x, y, w, h, t) {
+  drawProductStand(ctx, x, y, w, h, t, imgQ11, 'Q11', q11Icon);
 }
 
 function drawCone(ctx, x, y, w, h) {
