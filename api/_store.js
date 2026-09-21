@@ -1,11 +1,24 @@
 // Wspolne klocki dla funkcji API: magazyn (Vercel KV przez REST) i walidacja.
 // Bez zaleznosci npm - Upstash wystawia REST, wiec wystarczy fetch.
 
-// Vercel nazywa te zmienne inaczej w zaleznosci od tego, czy baze zalozysz
-// jako Vercel KV, czy jako Upstash Redis z Marketplace. Przyjmujemy oba
-// warianty, zeby konfiguracja na stoisku nie wywrocila sie o nazwe.
-const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+// Nazwa zmiennych zalezy od tego, jak zalozono baze (Vercel KV vs Upstash
+// z Marketplace) i czy przy podpinaniu podano wlasny przedrostek - wtedy
+// jest np. GRA_REST_API_URL. Zamiast zgadywac, szukamy po koncowce nazwy:
+// najpierw dokladne trafienie, potem dowolny przedrostek.
+function pickEnv(names) {
+  for (const n of names) if (process.env[n]) return { name: n, value: process.env[n] };
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!value) continue;
+    if (names.some((n) => key.endsWith('_' + n))) return { name: key, value };
+  }
+  return { name: null, value: undefined };
+}
+
+const urlEnv = pickEnv(['KV_REST_API_URL', 'UPSTASH_REDIS_REST_URL', 'REST_API_URL']);
+const tokenEnv = pickEnv(['KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_TOKEN', 'REST_API_TOKEN']);
+const KV_URL = urlEnv.value;
+const KV_TOKEN = tokenEnv.value;
+const kvEnvNames = { url: urlEnv.name, token: tokenEnv.name };
 
 const BOARD_KEY = 'ampererush:board';
 const RUN_TTL = 60 * 60 * 24;   // kod przejazdu wazny dobe
@@ -81,6 +94,6 @@ function json(res, status, payload) {
 }
 
 module.exports = {
-  kvReady, kv, makeCode, runKey, saveRun, loadRun, addToBoard, topBoard,
+  kvReady, kv, kvEnvNames, makeCode, runKey, saveRun, loadRun, addToBoard, topBoard,
   cleanNick, cleanEmail, readBody, json
 };

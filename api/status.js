@@ -1,11 +1,13 @@
 // Kontrolka konfiguracji: mowi, co jest podpiete, i sprawdza, czy baza
 // naprawde odpowiada. Nie zwraca zadnych tokenow ani danych graczy.
 
-const { kvReady, kv, json } = require('./_store.js');
+const { kvReady, kv, kvEnvNames, json } = require('./_store.js');
 
 async function handler(req, res) {
   const out = {
-    kv: { configured: kvReady, reachable: false },
+    // Nazwy zmiennych nie sa tajne, a bez nich nie da sie zdalnie ustalic,
+    // czy Vercel wstrzyknal to, co trzeba.
+    kv: { configured: kvReady, reachable: false, usingEnv: kvEnvNames },
     pipedrive: { configured: Boolean(process.env.PIPEDRIVE_TOKEN) },
     sheet: { configured: Boolean(process.env.SHEET_WEBHOOK_URL) },
     event: process.env.EVENT_TAG || 'KNM 2026 Katowice'
