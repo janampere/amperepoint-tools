@@ -9,6 +9,10 @@ const {
 const PIPEDRIVE_TOKEN = process.env.PIPEDRIVE_TOKEN;
 const SHEET_WEBHOOK_URL = process.env.SHEET_WEBHOOK_URL;
 const EVENT_TAG = process.env.EVENT_TAG || 'KNM 2026 Katowice';
+// Apps Script po wdrozeniu budzi sie wolno (zimny start + otwarcie arkusza),
+// wiec 8 s bylo za malo i konczylo sie zerwaniem polaczenia mimo udanego
+// zapisu. Przy nagrzanym skrypcie zapytanie wraca w 1-3 s.
+const SHEET_TIMEOUT = 15000;
 
 async function withTimeout(promise, ms) {
   const ctl = new AbortController();
@@ -75,8 +79,15 @@ async function postToSheet(url, entry, signal) {
 
 async function toSheet(entry) {
   if (!SHEET_WEBHOOK_URL) return 'skipped';
-  const out = await withTimeout(
-    (signal) => postToSheet(SHEET_WEBHOOK_URL, entry, signal), 8000);
+  let out;
+  try {
+    out = await withTimeout(
+      (signal) => postToSheet(SHEET_WEBHOOK_URL, entry, signal), SHEET_TIMEOUT);
+  } catch (e) {
+    // Zerwanie po czasie nie znaczy, ze zapis sie nie udal - zadanie
+    // doszlo, tylko odpowiedz nie wrocila na czas.
+    return e.name === 'AbortError' ? 'brak odpowiedzi w ' + (SHEET_TIMEOUT / 1000) + ' s' : 'failed';
+  }
   if (out.wrote) return 'ok';
   if (out.status >= 200 && out.status < 300) return 'brak potwierdzenia zapisu';
   return 'HTTP ' + out.status;
@@ -133,6 +144,6 @@ module.exports = handler;
 module.exports.toSheetDebug = async (entry) => {
   if (!SHEET_WEBHOOK_URL) return { error: 'brak SHEET_WEBHOOK_URL' };
   const out = await withTimeout(
-    (signal) => postToSheet(SHEET_WEBHOOK_URL, entry, signal), 8000);
+    (signal) => postToSheet(SHEET_WEBHOOK_URL, entry, signal), SHEET_TIMEOUT);
   return { status: out.status, wrote: out.wrote, odpowiedz: String(out.text).slice(0, 400) };
 };
