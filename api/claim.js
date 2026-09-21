@@ -100,13 +100,15 @@ async function handler(req, res) {
   await saveRun(code, Object.assign({}, run, { claimed: true, nick, hasEmail: Boolean(email) }));
 
   // Integracje sa best-effort i nie blokuja odpowiedzi dla gracza.
+  // Arkusz dostaje kazdy zapisany przejazd, bo sluzy tez za liste "kto
+  // zagral". Pipedrive tylko tych z mailem - kontakt bez adresu jest pusty.
   const delivery = { pipedrive: 'skipped', sheet: 'skipped' };
-  if (email) {
-    const lead = Object.assign({}, entry, { email, consent: true, event: EVENT_TAG });
-    const [pd, sh] = await Promise.allSettled([toPipedrive(lead), toSheet(lead)]);
-    delivery.pipedrive = pd.status === 'fulfilled' ? pd.value : 'failed';
-    delivery.sheet = sh.status === 'fulfilled' ? sh.value : 'failed';
-  }
+  const row = Object.assign({}, entry, { email: email || '', consent, event: EVENT_TAG });
+  const jobs = [toSheet(row)];
+  if (email) jobs.push(toPipedrive(row));
+  const [sh, pd] = await Promise.allSettled(jobs);
+  delivery.sheet = sh.status === 'fulfilled' ? sh.value : 'failed';
+  if (pd) delivery.pipedrive = pd.status === 'fulfilled' ? pd.value : 'failed';
 
   return json(res, 200, { ok: true, nick, score: entry.score, delivery });
 }
