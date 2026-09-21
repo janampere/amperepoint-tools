@@ -1928,10 +1928,17 @@ function renderQR() {
     ctx.drawImage(qrCanvas, qx, qy, qs, qs);
     ctx.imageSmoothingEnabled = true;
 
-    text('KOD: ' + runCode, rx, qy + qs + u * 5,
-         { size: u * 3, color: INK, align: 'center', mono: true, spacing: 3, weight: 700 });
-    text('wpisz wynik na tablicę — nick i e-mail na swoim telefonie', rx, qy + qs + u * 8.6,
-         { size: u * 1.7, color: MUTED, align: 'center' });
+    text('KOD: ' + runCode, rx, qy + qs + u * 4.6,
+         { size: u * 2.6, color: INK, align: 'center', mono: true, spacing: 3, weight: 700 });
+
+    // Powod, dla ktorego ktos siega po telefon - stad pasek, a nie podpis.
+    const pw = qs + u * 10, px = rx - pw / 2, py = qy + qs + u * 6.4;
+    ctx.fillStyle = BRAND;
+    ctx.fillRect(px, py, pw, u * 8.4);
+    text('PODAJ E-MAIL', rx, py + u * 3.4,
+         { size: u * 2.5, color: PAPER, align: 'center', spacing: 3, weight: 700 });
+    text('I WYGRAJ NAGRODY', rx, py + u * 6.6,
+         { size: u * 2.5, color: PAPER, align: 'center', spacing: 3, weight: 700 });
   } else {
     ctx.fillStyle = GREY;
     ctx.fillRect(qx, qy, qs, qs);
