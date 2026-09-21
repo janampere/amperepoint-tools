@@ -22,6 +22,11 @@ var HEADERS = ['Data zapisu', 'Nick', 'E-mail', 'Zgoda', 'Wynik', 'Dystans (m)',
 
 function doPost(e) {
   try {
+    if (!e || !e.postData || !e.postData.contents) {
+      // Zdarza sie, gdy zadanie dotarlo bez tresci - wtedy chcemy to
+      // zobaczyc w odpowiedzi, a nie zgadywac, czemu arkusz jest pusty.
+      return json_({ ok: false, wrote: false, error: 'brak tresci zadania' });
+    }
     var data = JSON.parse(e.postData.contents);
     var sheet = getSheet_();
     sheet.appendRow([
@@ -37,9 +42,12 @@ function doPost(e) {
       data.playedAt || '',
       data.event || ''
     ]);
-    return json_({ ok: true });
+    // "wrote" jest potwierdzeniem, ze wiersz naprawde powstal. Bez tego
+    // nie da sie odroznic udanego zapisu od sytuacji, w ktorej zadanie
+    // trafilo w doGet i tylko wygladalo na przyjete.
+    return json_({ ok: true, wrote: true, row: sheet.getLastRow() });
   } catch (err) {
-    return json_({ ok: false, error: String(err) });
+    return json_({ ok: false, wrote: false, error: String(err) });
   }
 }
 

@@ -50,6 +50,23 @@ async function checkSheet() {
   return out;
 }
 
+// /api/status?test=sheet wysyla jeden oznaczony wiersz i pokazuje, co
+// arkusz odpowiedzial. Sluzy do rozbrojenia sytuacji "wyglada dobrze, a
+// wierszy brak" - inaczej trzeba by zgadywac.
+async function writeTestRow() {
+  if (!SHEET_WEBHOOK_URL) return { error: 'brak SHEET_WEBHOOK_URL' };
+  const { toSheetDebug } = require('./claim.js');
+  try {
+    return await toSheetDebug({
+      nick: 'TEST', email: '', consent: false, score: 0, distance: 0,
+      pickups: 0, level: 1, code: 'TEST', playedAt: new Date().toISOString(),
+      event: (process.env.EVENT_TAG || 'KNM 2026 Katowice') + ' (wiersz testowy)'
+    });
+  } catch (e) {
+    return { error: String(e.message || e) };
+  }
+}
+
 async function handler(req, res) {
   const out = {
     // Nazwy zmiennych nie sa tajne, a bez nich nie da sie zdalnie ustalic,
@@ -70,6 +87,10 @@ async function handler(req, res) {
   const [pd, sh] = await Promise.all([checkPipedrive(), checkSheet()]);
   out.pipedrive = pd;
   out.sheet = sh;
+
+  if (req.query && req.query.test === 'sheet') {
+    out.testowyWiersz = await writeTestRow();
+  }
 
   out.ready = out.kv.reachable;
   out.leady = pd.reachable && sh.reachable;
