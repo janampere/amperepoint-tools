@@ -1,8 +1,11 @@
 // Wspolne klocki dla funkcji API: magazyn (Vercel KV przez REST) i walidacja.
 // Bez zaleznosci npm - Upstash wystawia REST, wiec wystarczy fetch.
 
-const KV_URL = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+// Vercel nazywa te zmienne inaczej w zaleznosci od tego, czy baze zalozysz
+// jako Vercel KV, czy jako Upstash Redis z Marketplace. Przyjmujemy oba
+// warianty, zeby konfiguracja na stoisku nie wywrocila sie o nazwe.
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
 const BOARD_KEY = 'ampererush:board';
 const RUN_TTL = 60 * 60 * 24;   // kod przejazdu wazny dobe
