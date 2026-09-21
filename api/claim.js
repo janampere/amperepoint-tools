@@ -57,23 +57,18 @@ async function toPipedrive(entry) {
   return 'ok';
 }
 
-// Apps Script na POST do /exec odpowiada przekierowaniem, a przy
-// przekierowaniu 302 metoda POST zamienia sie na GET - zadanie trafia
-// wtedy w doGet, dostajemy grzeczne 200 i ani jednego wiersza. Dlatego
-// nie ufamy samemu kodowi odpowiedzi, tylko szukamy potwierdzenia "wrote",
-// a gdy go nie ma, ponawiamy POST prosto pod adres z przekierowania.
-async function postToSheet(url, entry, signal, allowRedirect) {
+// Apps Script na POST do /exec odpowiada przekierowaniem pod adres, ktory
+// serwuje juz tylko wynik wykonania - sam doPost zdazyl sie wykonac przy
+// pierwszym zadaniu. Dlatego przekierowanie po prostu sledzimy (ponawianie
+// POST-a konczy sie tam bledem 405), a o powodzeniu decyduje potwierdzenie
+// "wrote" w odpowiedzi, nie sam kod HTTP.
+async function postToSheet(url, entry, signal) {
   const res = await fetch(url, {
     method: 'POST',
     signal,
-    redirect: allowRedirect ? 'follow' : 'manual',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry)
   });
-  if (!allowRedirect && res.status >= 300 && res.status < 400) {
-    const location = res.headers.get('location');
-    if (location) return postToSheet(location, entry, signal, true);
-  }
   const text = await res.text().catch(() => '');
   return { status: res.status, wrote: /"wrote"\s*:\s*true/.test(text), text };
 }
@@ -81,7 +76,7 @@ async function postToSheet(url, entry, signal, allowRedirect) {
 async function toSheet(entry) {
   if (!SHEET_WEBHOOK_URL) return 'skipped';
   const out = await withTimeout(
-    (signal) => postToSheet(SHEET_WEBHOOK_URL, entry, signal, false), 8000);
+    (signal) => postToSheet(SHEET_WEBHOOK_URL, entry, signal), 8000);
   if (out.wrote) return 'ok';
   if (out.status >= 200 && out.status < 300) return 'brak potwierdzenia zapisu';
   return 'HTTP ' + out.status;
@@ -138,6 +133,6 @@ module.exports = handler;
 module.exports.toSheetDebug = async (entry) => {
   if (!SHEET_WEBHOOK_URL) return { error: 'brak SHEET_WEBHOOK_URL' };
   const out = await withTimeout(
-    (signal) => postToSheet(SHEET_WEBHOOK_URL, entry, signal, false), 8000);
-  return { status: out.status, wrote: out.wrote, odpowiedz: String(out.text).slice(0, 300) };
+    (signal) => postToSheet(SHEET_WEBHOOK_URL, entry, signal), 8000);
+  return { status: out.status, wrote: out.wrote, odpowiedz: String(out.text).slice(0, 400) };
 };
