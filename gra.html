@@ -103,6 +103,9 @@ function loadImg(src) {
 }
 const imgPrime = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Wallbox_MAIN_23_2c3bb7e1-da33-45ed-bcdb-d729a42035f4.jpg?v=1787313349&width=320');
 const imgQ11 = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Q11_2ba5f7ed-4505-43b8-b2cc-928fbe90ddc7.png?v=1788339617&width=320');
+// Zdjecie Omody leci tylko do banera nagrody - to kadr z tlem, wiec jako
+// sprite na jezdni wygladalby jak latajacy prostokat.
+const imgOmoda = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/omoda-9-tyl-1024x517.webp?v=1758536871&width=640');
 
 const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
 const CFG = {
@@ -126,7 +129,13 @@ const brakeRate = -maxSpeed / 1.6;
 const decelRate = -maxSpeed / 6;
 const offRoadDecel = -maxSpeed / 2.2;
 const offRoadLimit = maxSpeed / 3.4;
-const PLAYER_W = 1000;
+// Auto gracza rysujemy w stalym rozmiarze ekranowym (~0.195 szerokosci
+// kadru), co w jednostkach swiata wychodzi ~480. Ruch uliczny mial 980,
+// czyli dwa razy tyle - stad wrazenie, ze inni jezdza czolgami.
+const PLAYER_W = 480;
+const TRAFFIC_W = 500;
+const OMODA_LEVEL = 9;
+const LIVES = 4;
 
 // Kazde okrazenie to nowy poziom. Rosnie predkosc, ruch i zuzycie pradu,
 // a na trasie budza sie pachołki uspione na starcie - zeby po kilku
@@ -622,6 +631,35 @@ const CAR_SKINS = [
   { body: '#5C6370', roof: '#474D58', glass: '#15181D', light: '#C2401F' }
 ];
 const PLAYER_SKIN = { body: BRAND, roof: '#E55F00', glass: INK, light: PAPER };
+const OMODA_SKIN = { body: '#4A5262', roof: '#242A33', glass: '#0D1117', light: '#C2401F' };
+
+// Nagroda za dojechanie do 9. okrazenia. SUV, wiec wyzsza bryla i
+// charakterystyczny pasek swiatel przez cala szerokosc tylu.
+function drawOmoda(ctx, x, y, w, h, c, opts) {
+  opts = opts || {};
+  drawShadow(ctx, x, y, w, h);
+  ctx.fillStyle = INK;
+  ctx.fillRect(x, y + h * 0.58, w * 0.16, h * 0.38);
+  ctx.fillRect(x + w * 0.84, y + h * 0.58, w * 0.16, h * 0.38);
+  ctx.fillStyle = c.body;
+  ctx.fillRect(x + w * 0.04, y + h * 0.24, w * 0.92, h * 0.68);
+  ctx.fillStyle = c.roof;
+  ctx.fillRect(x + w * 0.12, y, w * 0.76, h * 0.44);
+  ctx.fillStyle = c.glass;
+  ctx.fillRect(x + w * 0.17, y + h * 0.07, w * 0.66, h * 0.24);
+  // spoiler
+  ctx.fillStyle = c.roof;
+  ctx.fillRect(x + w * 0.10, y - h * 0.04, w * 0.80, h * 0.05);
+  // pasek swiatel przez caly tyl
+  ctx.fillStyle = c.light;
+  ctx.fillRect(x + w * 0.08, y + h * 0.50, w * 0.84, h * 0.07);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(x + w * 0.06, y + h * 0.80, w * 0.88, h * 0.09);
+  if (opts.boost) {
+    ctx.fillStyle = BRAND;
+    ctx.fillRect(x + w * 0.22, y + h * 0.90, w * 0.56, h * 0.05);
+  }
+}
 
 // ---------------------------------------------------------------- budowa trasy
 let segments = [];
@@ -758,7 +796,7 @@ function resetCars(count) {
       z: Math.floor(Math.random() * segments.length) * CFG.segmentLength,
       speed: rnd(maxSpeed / 5, maxSpeed / 2.1),
       skin: pick(CAR_SKINS),
-      w: 980
+      w: TRAFFIC_W
     });
   }
   syncCarSegments();
@@ -813,6 +851,7 @@ function carSteer(car, carSeg, playerSeg, playerW) {
 const player = {
   x: 0, speed: 0, position: 0, travelled: 0,
   battery: 100, score: 0, pickups: 0, streak: 0, best: 0, level: 1,
+  lives: LIVES, endReason: 'battery',
   hitCooldown: 0, shake: 0, flashBrand: 0, flashRed: 0
 };
 let levelBanner = 0;
@@ -954,6 +993,8 @@ function resetRun() {
   player.pickups = 0;
   player.streak = 0;
   player.level = 1;
+  player.lives = LIVES;
+  player.endReason = 'battery';
   levelBanner = 0;
   player.hitCooldown = 0;
   player.shake = 0;
@@ -1171,15 +1212,17 @@ function render() {
   const lean = Input.steer * speedPct;
   const blink = player.hitCooldown > 0 && Math.floor(player.hitCooldown * 16) % 2 === 0;
   if ((state === 'play' || state === 'countdown') && !blink) {
-    const cw = projW * 0.195;
-    const ch = cw * 0.94;
+    const omoda = player.level >= OMODA_LEVEL;
+    const cw = projW * (omoda ? 0.215 : 0.195);
+    const ch = cw * (omoda ? 1.0 : 0.94);
     const cx = W / 2 - cw / 2;
     const cy = Math.min(pDestY + bounce, H * 0.985) - ch;   // nie wychodz poza dolna krawedz
     ctx.save();
     ctx.translate(W / 2, cy + ch);
     ctx.rotate(-lean * 0.05);
     ctx.translate(-W / 2, -(cy + ch));
-    drawCar(ctx, cx, cy, cw, ch, PLAYER_SKIN, { boost: speedPct > 0.75 });
+    if (omoda) drawOmoda(ctx, cx, cy, cw, ch, OMODA_SKIN, { boost: speedPct > 0.75 });
+    else drawCar(ctx, cx, cy, cw, ch, PLAYER_SKIN, { boost: speedPct > 0.75 });
     ctx.restore();
   }
 
@@ -1265,6 +1308,22 @@ function renderHUD() {
   text(String(player.level), lvX + lvW / 2, u * 8.6,
        { size: u * 3.6, color: PAPER, align: 'center', mono: true, weight: 700 });
 
+  // zycia
+  const liX = lvX + lvW + u * 2.5;
+  text('ŻYCIA', liX, u * 4.4, { size: u * 1.4, color: MUTED, spacing: 2 });
+  for (let i = 0; i < LIVES; i++) {
+    const cx = liX + i * u * 3.4, cy = u * 6.2, cw2 = u * 2.6, ch2 = u * 3;
+    if (i < player.lives) {
+      ctx.fillStyle = BRAND;
+      ctx.fillRect(cx, cy, cw2, ch2);
+      ctx.fillStyle = PAPER;
+      ctx.fillRect(cx + cw2 * 0.18, cy + ch2 * 0.18, cw2 * 0.64, ch2 * 0.3);
+    } else {
+      ctx.strokeStyle = LINE; ctx.lineWidth = 1;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, cw2 - 1, ch2 - 1);
+    }
+  }
+
   // wynik
   text('WYNIK', W - pad, u * 3.6, { size: u * 1.6, color: MUTED, align: 'right', spacing: 2.5 });
   text(String(Math.floor(player.score)).padStart(6, '0'), W - pad, u * 9.6,
@@ -1329,18 +1388,32 @@ function renderHUD() {
 
   // baner awansu
   if (levelBanner > 0) {
-    const p = clamp(levelBanner / 2.4, 0, 1);
-    const slide = (1 - Math.min(1, (2.4 - levelBanner) * 4)) * u * 8;
+    const reward = player.level === OMODA_LEVEL;
+    const withPhoto = reward && imgOmoda.ready;
+    const p = clamp(levelBanner / (reward ? 4 : 2.4), 0, 1);
+    const slide = (1 - Math.min(1, ((reward ? 4 : 2.4) - levelBanner) * 4)) * u * 8;
     ctx.globalAlpha = Math.min(1, p * 2.5);
-    const bh = u * 16, by = H * 0.30 + slide;
+    const bh = u * (withPhoto ? 34 : 16), by = H * (withPhoto ? 0.22 : 0.30) + slide;
     ctx.fillStyle = INK;
     ctx.fillRect(0, by, W, bh);
     ctx.fillStyle = BRAND;
     ctx.fillRect(0, by + bh - u * 1.2, W, u * 1.2);
-    text('LEVEL ' + player.level, W / 2, by + u * 8,
-         { size: u * 8, color: PAPER, align: 'center', spacing: 6, weight: 900 });
-    text('SZYBCIEJ · WIĘCEJ RUCHU · +' + (LEVEL.bonus * (player.level - 1)) + ' PKT',
-         W / 2, by + u * 12.6, { size: u * 2, color: BRAND, align: 'center', spacing: 3 });
+
+    if (reward) {
+      text('OMODA 9 ODBLOKOWANA', W / 2, by + u * 7,
+           { size: u * 6.4, color: PAPER, align: 'center', spacing: 5, weight: 900 });
+      if (withPhoto) {
+        const ph = u * 18, pw = ph * (imgOmoda.img.naturalWidth / imgOmoda.img.naturalHeight);
+        ctx.drawImage(imgOmoda.img, W / 2 - pw / 2, by + u * 10, pw, ph);
+      }
+      text('NOWA FURA · LEVEL 9', W / 2, by + bh - u * 3.4,
+           { size: u * 2.2, color: BRAND, align: 'center', spacing: 4 });
+    } else {
+      text('LEVEL ' + player.level, W / 2, by + u * 8,
+           { size: u * 8, color: PAPER, align: 'center', spacing: 6, weight: 900 });
+      text('SZYBCIEJ · WIĘCEJ RUCHU · +' + (LEVEL.bonus * (player.level - 1)) + ' PKT',
+           W / 2, by + u * 12.6, { size: u * 2, color: BRAND, align: 'center', spacing: 3 });
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -1474,6 +1547,11 @@ function renderCountdown() {
   }
 }
 
+// Gracz ma wiedziec, co go zabilo - prad czy blacha.
+function endTitle() {
+  return player.endReason === 'crash' ? 'AUTO ROZBITE' : 'BATERIA NA ZERO';
+}
+
 function renderGameOver() {
   const u = Math.min(W, H) / 100;
   touchZones = [];
@@ -1482,7 +1560,7 @@ function renderGameOver() {
 
   ctx.fillStyle = INK;
   ctx.fillRect(0, H * 0.14, W, u * 9);
-  text('BATERIA NA ZERO', W / 2, H * 0.14 + u * 6.2,
+  text(endTitle(), W / 2, H * 0.14 + u * 6.2,
        { size: u * 5.4, color: PAPER, align: 'center', spacing: 4, weight: 700 });
 
   text('WYNIK', W / 2, H * 0.33, { size: u * 1.8, color: MUTED, align: 'center', spacing: 4 });
@@ -1556,7 +1634,7 @@ function addPopup(txt, color, big) {
   popups.push({ txt, color, big, x: W / 2 + rnd(-40, 40), y: H * 0.56, life: 1.2 });
 }
 
-function hitSomething(penalty, msg) {
+function hitSomething(penalty, msg, costLife) {
   if (player.hitCooldown > 0) return;
   player.speed = Math.max(player.speed * 0.35, 0);
   player.battery = Math.max(0, player.battery - penalty);
@@ -1565,13 +1643,25 @@ function hitSomething(penalty, msg) {
   player.shake = 16;
   player.flashRed = 1;
   Sfx.crash();
-  if (msg) addPopup(msg, '#ff6b6b', true);
+
+  if (costLife) {
+    player.lives--;
+    if (player.lives <= 0) {
+      player.lives = 0;
+      addPopup('AUTO ROZBITE', '#D93025', true);
+      endRun('crash');
+      return;
+    }
+    addPopup(msg + ' · ZOSTAŁY ' + player.lives, '#D93025', true);
+    return;
+  }
+  if (msg) addPopup(msg, '#D93025', true);
 }
 
 function levelUp() {
   player.level++;
   player.score += LEVEL.bonus * (player.level - 1);
-  levelBanner = 2.4;
+  levelBanner = player.level === OMODA_LEVEL ? 4 : 2.4;
 
   // dokladamy ruchu, ale nie przestawiamy aut juz na trasie
   const target = Math.min(LEVEL.carsMax, 14 + (player.level - 1) * LEVEL.carsStep);
@@ -1581,7 +1671,7 @@ function levelUp() {
       z: Math.floor(Math.random() * segments.length) * CFG.segmentLength,
       speed: rnd(maxSpeed / 5, maxSpeed / 2.1),
       skin: pick(CAR_SKINS),
-      w: 980
+      w: TRAFFIC_W
     };
     cars.push(car);
     findSegment(car.z).cars.push(car);
@@ -1636,7 +1726,7 @@ function updatePlay(dt) {
     for (const car of playerSegment.cars) {
       if (player.speed > car.speed &&
           overlap(player.x, PLAYER_W / CFG.roadWidth, car.offset, car.w / CFG.roadWidth, 0.85)) {
-        hitSomething(10, 'STŁUCZKA!');
+        hitSomething(8, 'STŁUCZKA', true);
         player.position = (findSegment(player.position + playerZ).p1.world.z - playerZ + trackLength) % trackLength;
         break;
       }
@@ -1648,7 +1738,7 @@ function updatePlay(dt) {
   for (const sp of playerSegment.sprites) {
     if (sp.minLevel && player.level < sp.minLevel) continue;
     const halfW = sp.sprite.w / CFG.roadWidth;
-    if (!overlap(player.x, PLAYER_W / CFG.roadWidth, sp.offset, halfW, 0.8)) continue;
+    if (!overlap(player.x, PLAYER_W / CFG.roadWidth, sp.offset, halfW, 1.0)) continue;
     if (sp.kind === 'pickup') {
       if (now - sp.takenAt > 9000) collectPylon(sp);
     } else if (sp.kind === 'cone' && player.hitCooldown <= 0) {
@@ -1673,7 +1763,7 @@ function updatePlay(dt) {
 
   if (player.battery <= 0) {
     player.battery = 0;
-    endRun();
+    endRun('battery');
   }
 }
 
@@ -1690,7 +1780,8 @@ function updateAttractDemo(dt) {
   updateCars(dt, seg, PLAYER_W);
 }
 
-function endRun() {
+function endRun(reason) {
+  player.endReason = reason || 'battery';
   Sfx.gameover();
   Sfx.engineUpdate(0, false);
   player.best = Math.max(player.best, Math.floor(player.score));
@@ -1775,7 +1866,7 @@ function renderQR() {
 
   ctx.fillStyle = INK;
   ctx.fillRect(0, H * 0.08, W, u * 8);
-  text('BATERIA NA ZERO', W / 2, H * 0.08 + u * 5.5,
+  text(endTitle(), W / 2, H * 0.08 + u * 5.5,
        { size: u * 4.6, color: PAPER, align: 'center', spacing: 4, weight: 700 });
 
   // lewa kolumna: wynik
