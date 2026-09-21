@@ -873,7 +873,7 @@ let scores = [];
 // Offline: wszystko leci na lokalna tablice jak dotad. Padniete wifi na
 // targach nie moze oznaczac padnietego stanowiska.
 let remoteBoard = null;
-let remoteBoardAt = 0;
+let remoteBoardAt = -1e9;   // nie blokuj pierwszego pobrania tuz po starcie
 let runCode = null;
 let runCodeErr = null;
 let qrCanvas = null;
@@ -896,9 +896,16 @@ async function fetchBoard() {
 
 function boardRows() {
   if (remoteBoard && remoteBoard.length) {
-    return remoteBoard.map((r) => ({ name: r.nick, score: r.score }));
+    return remoteBoard.map((r) => ({ name: r.nick, score: r.score, level: r.level }));
   }
   return scores.slice().sort((a, b) => b.score - a.score);
+}
+
+// Ktore miejsce zajalby wynik gracza. Zwraca 0, gdy nie ma z czym porownac.
+function wouldBeRank(score) {
+  const rows = boardRows();
+  if (!rows.length) return 0;
+  return rows.filter((r) => r.score > score).length + 1;
 }
 
 async function requestRunCode() {
@@ -1468,6 +1475,10 @@ function renderLeaderboard(cx, top, u, limit) {
     const y = ry + rowH * 0.72;
     text(String(i + 1), x + u * 1.6, y, { size: u * 2.1, color: hot ? PAPER : MUTED, mono: true });
     text(s.name, x + u * 6, y, { size: u * 2.3, color: col, mono: true, spacing: 2, weight: 700 });
+    if (s.level) {
+      text('LVL ' + s.level, x + w * 0.56, y,
+           { size: u * 1.6, color: hot ? PAPER : MUTED, spacing: 1.5 });
+    }
     text(String(s.score).padStart(6, '0'), x + w - u * 1.6, y,
          { size: u * 2.3, color: col, mono: true, align: 'right', weight: 600 });
   });
@@ -1875,6 +1886,17 @@ function renderQR() {
   text(String(Math.floor(player.score)).padStart(6, '0'), lx, H * 0.44,
        { size: u * 13, color: BRAND, align: 'center', mono: true, weight: 700 });
 
+  // Pozycja na tablicy to glowny powod, dla ktorego ktos siega po telefon.
+  const rank = wouldBeRank(Math.floor(player.score));
+  if (rank) {
+    const rw = u * 42, rx2 = lx - rw / 2;
+    ctx.fillStyle = rank <= 3 ? BRAND : GREY;
+    ctx.fillRect(rx2, H * 0.615, rw, u * 6.4);
+    text(rank <= 3 ? 'TO ' + rank + '. MIEJSCE NA TABLICY!' : 'TWÓJ WYNIK TO ' + rank + '. MIEJSCE',
+         lx, H * 0.615 + u * 4.2,
+         { size: u * 2.6, color: rank <= 3 ? PAPER : INK, align: 'center', spacing: 2, weight: 700 });
+  }
+
   const stats = [
     ['DYSTANS', Math.floor(player.travelled / CFG.distDivisor) + ' m'],
     ['POZIOM', String(player.level)],
@@ -1980,6 +2002,7 @@ function tick(dt) {
 
     case 'qr':
       updateAttractDemo(dt * 0.35);
+      fetchBoard();   // zeby pokazac, ktore miejsce dalby ten wynik
       // Kod zyje dobe, wiec nie trzymamy przy nim kolejki - 75 s wystarczy,
       // zeby wyciagnac telefon i zeskanowac.
       if (Input.pressed('start') && stateT > 1.2) startRun();

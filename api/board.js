@@ -10,7 +10,9 @@ async function handler(req, res) {
   try {
     const rows = await topBoard(limit);
     return json(res, 200, {
-      board: rows.map((r) => ({ nick: r.nick, score: r.score, playedAt: r.playedAt }))
+      board: rows.map((r) => ({
+        nick: r.nick, score: r.score, level: r.level || 1, playedAt: r.playedAt
+      }))
     });
   } catch (e) {
     return json(res, 503, { error: 'store_unavailable' });
