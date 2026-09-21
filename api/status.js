@@ -1,15 +1,60 @@
-// Kontrolka konfiguracji: mowi, co jest podpiete, i sprawdza, czy baza
-// naprawde odpowiada. Nie zwraca zadnych tokenow ani danych graczy.
+// Kontrolka konfiguracji: mowi, co jest podpiete, i realnie puka do kazdej
+// integracji. Nie zwraca tokenow, adresow ani danych graczy - tylko to, czy
+// dana rzecz odpowiada. Zadna z tych prob nic nie zapisuje.
 
 const { kvReady, kv, kvEnvNames, json } = require('./_store.js');
+
+const PIPEDRIVE_TOKEN = process.env.PIPEDRIVE_TOKEN;
+const SHEET_WEBHOOK_URL = process.env.SHEET_WEBHOOK_URL;
+
+async function ping(run, ms) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try { return await run(ctl.signal); } finally { clearTimeout(t); }
+}
+
+async function checkPipedrive() {
+  const out = { configured: Boolean(PIPEDRIVE_TOKEN), reachable: false };
+  if (!PIPEDRIVE_TOKEN) return out;
+  try {
+    // /users/me tylko czyta - potwierdza, ze token jest wazny.
+    const r = await ping((signal) => fetch(
+      'https://api.pipedrive.com/v1/users/me?api_token=' + encodeURIComponent(PIPEDRIVE_TOKEN),
+      { signal }), 6000);
+    const data = await r.json().catch(() => ({}));
+    out.reachable = Boolean(data && data.success);
+    if (!out.reachable) out.error = 'token odrzucony (HTTP ' + r.status + ')';
+    else if (data.data && data.data.company_name) out.company = data.data.company_name;
+  } catch (e) {
+    out.error = String(e.name === 'AbortError' ? 'brak odpowiedzi w 6 s' : e.message);
+  }
+  return out;
+}
+
+async function checkSheet() {
+  const out = { configured: Boolean(SHEET_WEBHOOK_URL), reachable: false };
+  if (!SHEET_WEBHOOK_URL) return out;
+  try {
+    // GET trafia w doGet, ktore tylko sie przedstawia - nie dopisuje wiersza.
+    const r = await ping((signal) => fetch(SHEET_WEBHOOK_URL, { signal }), 8000);
+    const txt = await r.text().catch(() => '');
+    out.reachable = r.ok && txt.includes('Ampere Rush');
+    if (!out.reachable) {
+      out.error = r.ok
+        ? 'adres odpowiada, ale to nie jest nasz skrypt (sprawdz, czy wklejony URL to wdrozenie z apps-script.gs)'
+        : 'HTTP ' + r.status + ' (czy dostep ustawiony na "Wszyscy"?)';
+    }
+  } catch (e) {
+    out.error = String(e.name === 'AbortError' ? 'brak odpowiedzi w 8 s' : e.message);
+  }
+  return out;
+}
 
 async function handler(req, res) {
   const out = {
     // Nazwy zmiennych nie sa tajne, a bez nich nie da sie zdalnie ustalic,
     // czy Vercel wstrzyknal to, co trzeba.
     kv: { configured: kvReady, reachable: false, usingEnv: kvEnvNames },
-    pipedrive: { configured: Boolean(process.env.PIPEDRIVE_TOKEN) },
-    sheet: { configured: Boolean(process.env.SHEET_WEBHOOK_URL) },
     event: process.env.EVENT_TAG || 'KNM 2026 Katowice'
   };
 
@@ -22,10 +67,17 @@ async function handler(req, res) {
     }
   }
 
+  const [pd, sh] = await Promise.all([checkPipedrive(), checkSheet()]);
+  out.pipedrive = pd;
+  out.sheet = sh;
+
   out.ready = out.kv.reachable;
-  out.hint = out.ready
-    ? 'Kody QR i wspolna tablica dzialaja.'
-    : 'Bez dzialajacego KV gra chodzi w trybie lokalnym: bez kodow QR i bez wspolnej tablicy.';
+  out.leady = pd.reachable && sh.reachable;
+  out.hint = !out.ready
+    ? 'Bez dzialajacego KV gra chodzi w trybie lokalnym: bez kodow QR i bez wspolnej tablicy.'
+    : out.leady
+      ? 'Wszystko podpiete: kody QR, wspolna tablica, Pipedrive i arkusz.'
+      : 'Gra i tablica dzialaja. Leady: sprawdz pola pipedrive/sheet powyzej.';
   return json(res, 200, out);
 }
 
