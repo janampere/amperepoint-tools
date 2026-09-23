@@ -949,8 +949,11 @@ async function requestRunCode() {
   runCodeErr = null;
   qrCanvas = null;
   try {
+    // Na targowym wifi cztery sekundy bywaly za krotkie, zwlaszcza gdy
+    // funkcja budzila sie na zimno - gra uznawala to za awarie i zjezdzala
+    // na inicjaly, choc wszystko dzialalo.
     const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 4000);
+    const t = setTimeout(() => ctl.abort(), 9000);
     const r = await fetch('/api/run', {
       method: 'POST',
       signal: ctl.signal,
@@ -1808,7 +1811,12 @@ function renderGameOver() {
     text(IS_TOUCH ? 'DOTKNIJ — JESZCZE RAZ' : 'START — JESZCZE RAZ', W / 2, by + bh * 0.66,
          { size: u * 3, color: PAPER, align: 'center', spacing: 3, weight: 700 });
     logo(W / 2, H * 0.85, u * 3.6, 'center');
-    text('ZAPRASZAMY NA STOISKO  ·  amperepoint.com', W / 2, H * 0.93,
+    if (runCodeErr) {
+      // Obsluga stoiska ma widziec, czemu nie ma kodu QR, zamiast zgadywac.
+      text('kod QR niedostępny: ' + runCodeErr, W / 2, H * 0.90,
+           { size: u * 1.5, color: '#D93025', align: 'center' });
+    }
+    text('ZAPRASZAMY NA STOISKO  ·  amperepoint.com', W / 2, H * 0.94,
          { size: u * 1.7, color: MUTED, align: 'center', spacing: 2 });
   }
 }
@@ -2180,7 +2188,7 @@ function tick(dt) {
     case 'saving':
       updateAttractDemo(dt * 0.35);
       if (runCode) { state = 'qr'; stateT = 0; Sfx.ui(); }
-      else if (runCodeErr || stateT > 5) fallbackToLocal();
+      else if (runCodeErr || stateT > 11) fallbackToLocal();
       break;
 
     case 'qr':
