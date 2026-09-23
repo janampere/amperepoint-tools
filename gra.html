@@ -912,7 +912,10 @@ let runCodeErr = null;
 let qrCanvas = null;
 
 async function fetchBoard() {
-  if (performance.now() - remoteBoardAt < 12000) return;
+  // Kiosk stoi wlaczony caly dzien, wiec odpytywanie co 12 s zjadalo ponad
+  // 7000 zapytan na dobe - wiecej, niz daje darmowy plan bazy. Minuta w
+  // zupelnosci wystarcza, a po zapisie wyniku i tak wymuszamy odswiezenie.
+  if (performance.now() - remoteBoardAt < 60000) return;
   remoteBoardAt = performance.now();
   try {
     const ctl = new AbortController();
@@ -966,7 +969,7 @@ async function requestRunCode() {
     runCode = data.code;
     qrCanvas = makeQR(location.origin + '/w.html?c=' + data.code);
     if (!qrCanvas) throw new Error('qr_failed');
-    remoteBoardAt = 0;   // tablica odswiezy sie zaraz po zapisie
+    remoteBoardAt = -1e9;   // wymus odswiezenie tablicy zaraz po zapisie
   } catch (e) {
     runCodeErr = String(e.message || e);
   }
