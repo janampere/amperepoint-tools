@@ -7,20 +7,25 @@ const { kvReady, kv, json } = require('./_store.js');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const BOARD_KEY = 'ampererush:board';
 
+// Sprzatanie po testach sprzed targow. Data jest wpisana na sztywno, wiec
+// ten tryb nie tknie zadnego wyniku z 23-25.09 nawet, gdyby ktos obcy
+// trafil na adres - a powtorne wywolanie niczego nie zmienia. Dzieki temu
+// dziala bez hasla, gdy nie ma dostepu do panelu.
+const PRZED_TARGAMI = Date.parse('2026-09-22T22:00:00.000Z');   // 23.09, 00:00 czasu lokalnego
+
 function entryTime(e) {
   return Date.parse(e.claimedAt || e.playedAt || '') || 0;
 }
 
 async function handler(req, res) {
   if (!kvReady) return json(res, 503, { error: 'not_configured' });
-  if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {
-    return json(res, 503, {
-      error: 'brak ADMIN_TOKEN',
-      hint: 'Ustaw w Vercelu zmienna ADMIN_TOKEN (dlugi, losowy ciag) i zrob redeploy.'
-    });
-  }
   const q = req.query || {};
-  if (String(q.token || '') !== ADMIN_TOKEN) return json(res, 403, { error: 'zle haslo' });
+
+  // Z haslem: pelne porzadki. Bez hasla: wylacznie sprzataniedanych sprzed
+  // targow, bo ten zakres jest nieszkodliwy nawet w cudzych rekach.
+  const hasToken = Boolean(ADMIN_TOKEN && ADMIN_TOKEN.length >= 12);
+  const authorized = hasToken && String(q.token || '') === ADMIN_TOKEN;
+  if (q.token && !authorized) return json(res, 403, { error: 'zle haslo' });
 
   let raw;
   try {
@@ -32,12 +37,16 @@ async function handler(req, res) {
     try { return { s, e: JSON.parse(s) }; } catch (err) { return { s, e: {} }; }
   });
 
-  // Domyslnie tniemy wszystko sprzed dzisiaj - to jest ten typowy przypadek
-  // "wyczysc testy z wczoraj", a date mozna nadpisac parametrem.
-  const before = q.before ? Date.parse(q.before) : new Date().setHours(0, 0, 0, 0);
-  if (Number.isNaN(before)) return json(res, 400, { error: 'zla data w parametrze before' });
-
-  const doomed = q.all === '1' ? rows : rows.filter((r) => entryTime(r.e) < before);
+  // Bez hasla dziala tylko sztywny zakres sprzed targow. Wlasna data i
+  // czyszczenie calej tablicy wymagaja hasla.
+  let before = PRZED_TARGAMI;
+  if (authorized && q.before) {
+    before = Date.parse(q.before);
+    if (Number.isNaN(before)) return json(res, 400, { error: 'zla data w parametrze before' });
+  }
+  const doomed = (authorized && q.all === '1')
+    ? rows
+    : rows.filter((r) => entryTime(r.e) < before);
   const summary = (list) => list.map((r) => ({
     nick: r.e.nick, score: r.e.score,
     kiedy: r.e.claimedAt || r.e.playedAt || '?'
@@ -46,6 +55,7 @@ async function handler(req, res) {
   if (q.confirm !== '1') {
     return json(res, 200, {
       tryb: 'podglad',
+      zakres: authorized ? 'pelny (z haslem)' : 'tylko wpisy sprzed 23.09',
       doUsuniecia: summary(doomed),
       zostanie: summary(rows.filter((r) => !doomed.includes(r))),
       hint: 'Dodaj &confirm=1 do adresu, zeby naprawde usunac.'
