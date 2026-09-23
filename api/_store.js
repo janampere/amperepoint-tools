@@ -75,6 +75,20 @@ function cleanNick(v) {
   return String(v || '').replace(/[^\p{L}\p{N} .\-_]/gu, '').trim().slice(0, 16);
 }
 
+// Klucz tozsamosci gracza. "Paweł Juzek", "pawel juzek" i "Pawel_Juzek" to
+// ta sama osoba - ludzie wpisuja nick raz z ogonkami, raz bez. NFD rozbija
+// znaki z akcentem na litere i znak diakrytyczny, ale "ł" nie ma takiego
+// rozkladu, wiec podmieniamy je osobno.
+function nickKey(v) {
+  return String(v || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/ł/gi, 'l')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 function cleanEmail(v) {
   const e = String(v || '').trim().toLowerCase().slice(0, 120);
   if (!e) return '';
@@ -95,5 +109,5 @@ function json(res, status, payload) {
 
 module.exports = {
   kvReady, kv, kvEnvNames, makeCode, runKey, saveRun, loadRun, addToBoard, topBoard,
-  cleanNick, cleanEmail, readBody, json
+  cleanNick, nickKey, cleanEmail, readBody, json
 };

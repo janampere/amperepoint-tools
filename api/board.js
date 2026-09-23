@@ -1,6 +1,6 @@
 // Tablica wynikow dla duzego ekranu. Kiosk odpytuje ja co minute.
 
-const { kvReady, topBoard, json } = require('./_store.js');
+const { kvReady, topBoard, nickKey, json } = require('./_store.js');
 
 async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { error: 'method_not_allowed' });
@@ -15,7 +15,7 @@ async function handler(req, res) {
     const rows = await topBoard(Math.min(80, limit * 8));
     const best = new Map();
     for (const r of rows) {
-      const key = String(r.nick || '').trim().toLowerCase();
+      const key = nickKey(r.nick);
       if (!key) continue;
       const prev = best.get(key);
       if (!prev || Number(r.score) > Number(prev.score)) best.set(key, r);
