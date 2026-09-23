@@ -107,6 +107,10 @@ const imgQ11 = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Q
 // sprite na jezdni wygladalby jak latajacy prostokat.
 const imgOmoda = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/omoda-9-tyl-1024x517.webp?v=1758536871&width=640');
 
+// Zdjecia nagrod na ekran tytulowy - to one maja zatrzymac przechodzacego.
+const imgSeriaB = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/ampere_point_b35_ladowarka_Schuko_230V_1.jpg?v=1765364614&width=480');
+const imgStorm = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/dr_storm_ampere_point_socket_square.jpg?v=1768991336&width=480');
+
 const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
 const CFG = {
   segmentLength: 200,
@@ -1593,6 +1597,64 @@ function renderPrizes(cx, top, u) {
   panelFrame(x, top, w, u, PRIZES.length);
 }
 
+// Plansza nagrod: duze haslo i zdjecia produktow. Ekran tytulowy przez
+// wiekszosc czasu oglada ktos, kto przechodzi obok - tabela wynikow mu nic
+// nie mowi, zdjecie ladowarki i slowo "wygraj" mowi wszystko.
+const PRIZE_CARDS = [
+  { pos: '1. MIEJSCE', name: 'Ładowarka serii Q', img: () => imgQ11, fallback: q11Icon },
+  { pos: '2-3. MIEJSCE', name: 'Ładowarka serii B', img: () => imgSeriaB, fallback: primeIcon },
+  { pos: '4-7. MIEJSCE', name: 'Dr. Storm', img: () => imgStorm, fallback: q11Icon }
+];
+
+function renderPrizeShowcase(u) {
+  text('WYGRAJ ŁADOWARKĘ', W / 2, H * 0.285,
+       { size: u * 10, color: INK, align: 'center', spacing: 2, weight: 900 });
+  ctx.fillStyle = BRAND;
+  ctx.fillRect(W / 2 - u * 24, H * 0.322, u * 48, u * 1);
+  text('7 NAGRÓD DO ZGARNIĘCIA · ZAGRAJ I ZAPISZ WYNIK', W / 2, H * 0.372,
+       { size: u * 2.4, color: MUTED, align: 'center', spacing: 4 });
+
+  const cw = u * 32, ch = u * 30, gap = u * 3;
+  const total = cw * 3 + gap * 2;
+  let x = W / 2 - total / 2;
+  const y = H * 0.40;
+
+  PRIZE_CARDS.forEach((card, i) => {
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(x, y, cw, ch);
+    ctx.strokeStyle = LINE; ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, cw - 1, ch - 1);
+
+    const pad = cw * 0.08;
+    const iw = cw - pad * 2, ih = ch * 0.60;
+    const ref = card.img();
+    if (ref.ready) {
+      const ar = ref.img.naturalWidth / ref.img.naturalHeight;
+      let dw = iw, dh = iw / ar;
+      if (dh > ih) { dh = ih; dw = ih * ar; }
+      dw *= 1.15; dh *= 1.15;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x + pad, y + pad, iw, ih); ctx.clip();
+      ctx.drawImage(ref.img, x + pad + (iw - dw) / 2, y + pad + (ih - dh) / 2, dw, dh);
+      ctx.restore();
+    } else {
+      card.fallback(ctx, x + pad, y + pad, iw, ih);
+    }
+
+    ctx.fillStyle = i === 0 ? BRAND : INK;
+    ctx.fillRect(x, y + ch - u * 8.4, cw, u * 8.4);
+    text(card.pos, x + cw / 2, y + ch - u * 5.4,
+         { size: u * 1.8, color: i === 0 ? 'rgba(255,255,255,0.85)' : '#9AA3B2',
+           align: 'center', spacing: 2.5 });
+    text(card.name, x + cw / 2, y + ch - u * 2,
+         { size: u * 2.4, color: PAPER, align: 'center', weight: 700 });
+    x += cw + gap;
+  });
+
+  text('zostaw e-mail po grze, żeby wziąć udział w losowaniu', W / 2, H * 0.745,
+       { size: u * 1.8, color: MUTED, align: 'center' });
+}
+
 function renderAttract() {
   const u = Math.min(W, H) / 100;
   ctx.fillStyle = 'rgba(255,255,255,0.86)';
@@ -1612,17 +1674,21 @@ function renderAttract() {
 
   logo(W / 2, H * 0.155, u * 4, 'center');
 
-  text('AMPERE RUSH', W / 2, H * 0.295, { size: u * 11, color: INK, align: 'center', spacing: -1, weight: 900 });
-  ctx.fillStyle = BRAND;
-  ctx.fillRect(W / 2 - u * 13, H * 0.315, u * 26, u * 0.9);
-  text('ELEKTRYCZNY WYŚCIG PO PRĄD', W / 2, H * 0.375,
-       { size: u * 2.2, color: MUTED, align: 'center', spacing: 5 });
+  // Ekran tytulowy zmienia sie co 8 s: raz nagrody, raz wyniki. Upchniecie
+  // obu naraz konczy sie tym, ze z daleka nie widac zadnego.
+  if (Math.floor(stateT / 8) % 2 === 0) {
+    renderPrizeShowcase(u);
+  } else {
+    text('AMPERE RUSH', W / 2, H * 0.295, { size: u * 11, color: INK, align: 'center', spacing: -1, weight: 900 });
+    ctx.fillStyle = BRAND;
+    ctx.fillRect(W / 2 - u * 13, H * 0.315, u * 26, u * 0.9);
+    text('ELEKTRYCZNY WYŚCIG PO PRĄD', W / 2, H * 0.375,
+         { size: u * 2.2, color: MUTED, align: 'center', spacing: 5 });
 
-  renderLeaderboard(W / 2 - u * 25, H * 0.40, u);
-  renderPrizes(W / 2 + u * 25, H * 0.40, u);
-  text('zostaw e-mail po grze, żeby wziąć udział w losowaniu', W / 2, H * 0.705,
-       { size: u * 1.6, color: MUTED, align: 'center' });
-  renderControlsHint(W / 2, H * 0.765, u);
+    renderLeaderboard(W / 2 - u * 25, H * 0.40, u);
+    renderPrizes(W / 2 + u * 25, H * 0.40, u);
+    renderControlsHint(W / 2, H * 0.765, u);
+  }
 
   // wezwanie do startu: pelny prostokat w kolorze marki
   const blink = Math.floor(t / 600) % 2 === 0;
