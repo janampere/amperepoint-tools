@@ -2,7 +2,7 @@
 // Wynik powstaje tutaj, nie na telefonie - inaczej nie da sie powiazac
 // maila z konkretna gra.
 
-const { kvReady, makeCode, saveRun, loadRun, json, readBody } = require('./_store.js');
+const { kvReady, makeCode, saveRun, loadRun, json, readBody, kvReason } = require('./_store.js');
 
 async function handler(req, res) {
   if (!kvReady) return json(res, 503, { error: 'not_configured' });
@@ -12,7 +12,8 @@ async function handler(req, res) {
     const code = String((req.query && req.query.code) || '').trim().toUpperCase().slice(0, 12);
     if (!code) return json(res, 400, { error: 'no_code' });
     let run;
-    try { run = await loadRun(code); } catch (e) { return json(res, 503, { error: 'store_unavailable' }); }
+    try { run = await loadRun(code); }
+    catch (e) { return json(res, 503, { error: 'store_unavailable', reason: kvReason(e) }); }
     if (!run) return json(res, 404, { error: 'unknown_code' });
     return json(res, 200, {
       score: run.score, distance: run.distance, pickups: run.pickups,
@@ -37,7 +38,9 @@ async function handler(req, res) {
       claimed: false
     });
   } catch (e) {
-    return json(res, 503, { error: 'store_unavailable' });
+    // Bez tego ekran przy stoisku pokazywal tylko "http_503" i nie dalo sie
+    // zdalnie stwierdzic, czy to baza, limit planu, czy sieć na targach.
+    return json(res, 503, { error: 'store_unavailable', reason: kvReason(e) });
   }
   return json(res, 200, { code });
 }

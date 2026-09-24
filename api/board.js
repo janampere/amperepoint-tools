@@ -1,6 +1,6 @@
 // Tablica wynikow dla duzego ekranu. Kiosk odpytuje ja co minute.
 
-const { kvReady, topBoard, nickKey, json } = require('./_store.js');
+const { kvReady, topBoard, nickKey, json, kvReason } = require('./_store.js');
 
 async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { error: 'method_not_allowed' });
@@ -26,9 +26,13 @@ async function handler(req, res) {
       .map((r) => ({
         nick: r.nick, score: r.score, level: r.level || 1, playedAt: r.playedAt
       }));
-    return json(res, 200, { board });
+    // Kazdy otwarty ekran pytal baze osobno. Teraz odpowiedz lezy przez 15 s
+    // na CDN Vercela, a przy padnietej bazie jest jeszcze przez pol godziny
+    // podawana nieswieza - lepsza tablica sprzed chwili niz zadna.
+    return json(res, 200, { board },
+                'public, s-maxage=15, stale-while-revalidate=1800');
   } catch (e) {
-    return json(res, 503, { error: 'store_unavailable' });
+    return json(res, 503, { error: 'store_unavailable', reason: kvReason(e) });
   }
 }
 

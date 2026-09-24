@@ -101,13 +101,33 @@ function readBody(req) {
   return {};
 }
 
-function json(res, status, payload) {
+// Przegladarka kiosku ma zawsze pytac o swieza tablice, ale CDN Vercela moze
+// odpowiadac za baze. Dlatego zapas idzie w CDN-Cache-Control, ktorego
+// przegladarka nie czyta - inaczej telewizor pokazywalby wynik sprzed minuty
+// zaraz po tym, jak ktos go zapisal telefonem.
+function json(res, status, payload, cdnCache) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
+  if (cdnCache) {
+    res.setHeader('CDN-Cache-Control', cdnCache);
+    res.setHeader('Vercel-CDN-Cache-Control', cdnCache);
+  }
   res.status(status).send(JSON.stringify(payload));
+}
+
+// Gdy baza odmawia, obsluga stoiska ma zobaczyc powod na ekranie, a nie samo
+// "store_unavailable" - przy limicie planu Upstash odpowiada tekstem, ktory
+// od razu mowi, co jest grane. Adresy i tokeny w komunikacie nie wystepuja,
+// ale i tak je wycinamy, zeby nic nie wyciekalo na ekran przy stoisku.
+function kvReason(e) {
+  return String((e && e.message) || e)
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[A-Za-z0-9_-]{24,}/g, '')
+    .trim()
+    .slice(0, 120);
 }
 
 module.exports = {
   kvReady, kv, kvEnvNames, makeCode, runKey, saveRun, loadRun, addToBoard, topBoard,
-  cleanNick, nickKey, cleanEmail, readBody, json
+  cleanNick, nickKey, cleanEmail, readBody, json, kvReason
 };

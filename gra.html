@@ -905,7 +905,24 @@ let scores = [];
 // Online: wyniki sa wspolne dla calego stoiska, nick przychodzi z telefonu.
 // Offline: wszystko leci na lokalna tablice jak dotad. Padniete wifi na
 // targach nie moze oznaczac padnietego stanowiska.
-let remoteBoard = null;
+const LS_BOARD = 'ampere_rush_board_v1';
+
+// Telewizor przy stoisku nie moze wracac do pustej tablicy tylko dlatego, ze
+// baza mrugnela. Ostatnia udana odpowiedz zostaje na dysku i wraca po
+// odswiezeniu strony; osobna flaga mowi, czy to dane swieze, czy juz nie.
+function loadCachedBoard() {
+  try {
+    const raw = localStorage.getItem(LS_BOARD);
+    const rows = raw ? JSON.parse(raw) : null;
+    return Array.isArray(rows) && rows.length ? rows : null;
+  } catch (e) { return null; }
+}
+function saveCachedBoard(rows) {
+  try { localStorage.setItem(LS_BOARD, JSON.stringify(rows)); } catch (e) { /* tryb prywatny */ }
+}
+
+let remoteBoard = loadCachedBoard();
+let boardLive = false;
 let remoteBoardAt = -1e9;   // nie blokuj pierwszego pobrania tuz po starcie
 let runCode = null;
 let runCodeErr = null;
@@ -924,9 +941,15 @@ async function fetchBoard() {
     clearTimeout(t);
     if (!r.ok) throw new Error('http');
     const data = await r.json();
-    remoteBoard = Array.isArray(data.board) ? data.board : null;
+    if (Array.isArray(data.board) && data.board.length) {
+      remoteBoard = data.board;
+      saveCachedBoard(remoteBoard);
+    } else if (Array.isArray(data.board)) {
+      remoteBoard = data.board;   // tablica naprawde pusta, nie awaria
+    }
+    boardLive = true;
   } catch (e) {
-    remoteBoard = null;
+    boardLive = false;   // zostawiamy na ekranie to, co udalo sie pobrac ostatnio
   }
 }
 
@@ -966,7 +989,12 @@ async function requestRunCode() {
       })
     });
     clearTimeout(t);
-    if (!r.ok) throw new Error('http_' + r.status);
+    if (!r.ok) {
+      // Serwer dopisuje powod (np. limit planu bazy) - bez niego obsluga
+      // stoiska widziala samo "http_503" i nie dalo sie tego zdiagnozowac.
+      const why = await r.json().catch(() => ({}));
+      throw new Error('http_' + r.status + (why.reason ? ' — ' + why.reason : ''));
+    }
     const data = await r.json();
     if (!data.code) throw new Error('no_code');
     runCode = data.code;
@@ -1691,7 +1719,7 @@ function renderAttract() {
   cx += (TABLE_W + GAP) * uu;
   renderPrizePhotos(cx, top, uu);
 
-  text('zostaw e-mail po grze, żeby wziąć udział w losowaniu  ·  ' +
+  text('zostaw e-mail po grze, inaczej nie odbierzesz nagrody  ·  ' +
        (IS_TOUCH ? 'dotykaj lewej i prawej strony ekranu' : 'pad: drążek skręca, RT gazuje'),
        W / 2, H * 0.755, { size: u * 1.9, color: MUTED, align: 'center' });
 
@@ -1708,13 +1736,16 @@ function renderAttract() {
                : 'PODŁĄCZ PAD I WCIŚNIJ DOWOLNY PRZYCISK';
   text(padTxt, W / 2, H * 0.965, { size: u * 1.5, color: Input.pad ? BLUE : MUTED, align: 'center', spacing: 1.5 });
 
-  text('REGULAMIN KONKURSU: ' + regulaminUrl(), W - u * 2, H * 0.965,
+  text('REGULAMIN KONKURSU: ' + regulaminUrl(), W - u * 2, H * 0.925,
        { size: u * 1.3, color: MUTED, align: 'right', spacing: 1.5 });
 
-  // Sygnal dla obslugi stoiska, ze tablica zjechala na tryb lokalny.
-  if (!remoteBoard) {
-    text('TRYB OFFLINE — WYNIKI TYLKO NA TYM EKRANIE', u * 2, H * 0.965,
-         { size: u * 1.3, color: '#C9CED8', spacing: 1.5 });
+  // Sygnal dla obslugi stoiska: co innego brak wspolnej tablicy, a co innego
+  // tablica sprzed chwili, ktorej nie udalo sie odswiezyc.
+  if (!boardLive) {
+    text(remoteBoard && remoteBoard.length
+           ? 'BRAK ŁĄCZNOŚCI — TABLICA Z OSTATNIEGO POBRANIA'
+           : 'TRYB OFFLINE — WYNIKI TYLKO NA TYM EKRANIE',
+         u * 2, H * 0.965, { size: u * 1.3, color: '#C9CED8', spacing: 1.5 });
   }
 }
 
