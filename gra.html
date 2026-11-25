@@ -1222,7 +1222,8 @@ const player = {
   x: 0, speed: 0, position: 0, travelled: 0,
   battery: 100, score: 0, pickups: 0, streak: 0, level: 1,
   raceT: 0, lapT: 0, bestLap: 0, turbo: 0, limp: false, endReason: 'finish',
-  hitCooldown: 0, shake: 0, flashBrand: 0, flashRed: 0
+  hitCooldown: 0, shake: 0, flashBrand: 0, flashRed: 0,
+  roll: 0, rollV: 0   // przechyl nadwozia na sprezynie
 };
 let levelBanner = 0;
 
@@ -1395,6 +1396,8 @@ function resetRun() {
   levelBanner = 0;
   player.hitCooldown = 0;
   player.shake = 0;
+  player.roll = 0;
+  player.rollV = 0;
   player.flashBrand = 0;
   player.flashRed = 0;
   popups = [];
@@ -1706,7 +1709,7 @@ function render() {
   const pScale = cameraDepth / playerZ;
   const pDestY = (H / 2) - (pScale * lerp(playerSegment.p1.camera.y, playerSegment.p2.camera.y, playerPercent) * H / 2);
   const bounce = speedPct > 0.02 ? (1.4 * Math.random() * speedPct) * pick([-1, 1]) : 0;
-  const lean = Input.steer * speedPct;
+  const lean = state === 'play' ? player.roll : Input.steer * speedPct;
   const blink = player.hitCooldown > 0 && Math.floor(player.hitCooldown * 16) % 2 === 0;
   if ((state === 'play' || state === 'countdown') && !blink) {
     const omoda = player.level >= OMODA_LEVEL;
@@ -1717,7 +1720,8 @@ function render() {
     ctx.save();
     ctx.translate(W / 2, cy + ch);
     ctx.rotate(-lean * 0.05);
-    ctx.translate(-W / 2, -(cy + ch));
+    // SUV dodatkowo przesuwa sie bokiem na zawieszeniu
+    ctx.translate(-W / 2 + (omoda ? -lean * cw * 0.04 : 0), -(cy + ch));
     if (omoda) drawOmoda(ctx, cx, cy, cw, ch, OMODA_SKIN, { boost: speedPct > 0.75 });
     else drawCar(ctx, cx, cy, cw, ch, PLAYER_SKIN, { boost: speedPct > 0.75 });
     ctx.restore();
@@ -2345,6 +2349,7 @@ function hitSomething(penalty, msg) {
   player.hitCooldown = 1.1;
   player.shake = 16;
   player.flashRed = 1;
+  player.rollV += (Math.random() < 0.5 ? -1 : 1) * 9;   // uderzenie rozbujuje nadwozie
   Sfx.crash();
   if (msg) addPopup(msg, '#D93025', true);
 }
@@ -2443,6 +2448,15 @@ function updatePlay(dt) {
     player.battery = Math.max(0, player.battery - 4 * dt);
   }
   player.x = clamp(player.x, -2.6, 2.6);
+
+  // Przechyl nadwozia: sprezyna z tlumieniem. Nasze auto jest sztywne,
+  // Omoda to wysoki SUV na miekkim zawieszeniu - przechyla sie mocniej
+  // i buja, zanim sie uspokoi.
+  const soft = player.level >= OMODA_LEVEL;
+  const rollTarget = (Input.steer * 0.7 + playerSegment.curve * 0.12) * Math.min(speedPct, 1.2) * (soft ? 2.4 : 1);
+  const k = soft ? 26 : 70, damp = soft ? 2.6 : 16;
+  player.rollV += ((rollTarget - player.roll) * k - player.rollV * damp) * dt;
+  player.roll += player.rollV * dt;
 
   // Barierka promenady trzyma auto na jezdni - piesi sa bezpieczni, a kto
   // sie o nia otrze, traci predkosc.
