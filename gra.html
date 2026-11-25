@@ -145,11 +145,13 @@ const OMODA_LEVEL = 3;   // ostatnie okrazenie jedzie sie Omoda - final wyscigu
 // punkty bez konca i rekordzisci zajmowali stanowisko po godzinie.
 const RACE = { laps: 3, maxSec: 300 };   // po 5 minutach przejazd sie konczy bez czasu
 // Ladowarka = doladowanie baterii i turbo. Seria ladowarek wydluza turbo.
-const TURBO = { mult: 1.35, base: 2.2, perStreak: 0.6, max: 4.0 };
-const LIMP = 0.45;   // tryb awaryjny przy pustej baterii: ulamek predkosci
+// Pierwsza wersja (x1.35, ostre wejscie) wyrzucala z zakretow. Teraz turbo
+// dodaje mniej i narasta/opada plynnie.
+const TURBO = { mult: 1.18, base: 2.2, perStreak: 0.6, max: 4.0, push: 1.3, fade: 0.6 };
+const LIMP = 0.55;   // tryb awaryjny przy pustej baterii: ulamek predkosci
 // Bateria schodzi wolniej niz na KNM - tam pusta bateria konczyla gre i
 // napiecie bralo sie z tego. Tu ma tylko zmuszac do zjazdu po ladowarke.
-const DRAIN = 0.6;
+const DRAIN = 0.7;   // 0.6: awaryjny prawie nigdy; 0.8: bez ladowarek ponad 4 min jazdy
 
 // 151234 ms -> "2:31.23". Setne, bo przy kilkuset przejazdach dziesiate
 // czesci sekundy czesto by sie powtarzaly.
@@ -184,29 +186,30 @@ const COLORS = {
 };
 
 // Edycja e-Mobility w klimacie GTA VI: kazde okrazenie to inna pora dnia na
-// nadmorskiej autostradzie - poludnie, zachod slonca, neonowa noc, swit.
-// Jezdnia, krawedz i HUD zostaja nasze, rusza sie krajobraz. Bierzemy klimat
-// (kolory, palmy, ocean), nie szate graficzna Rockstara.
+// nadmorskiej autostradzie. Start od razu o zachodzie slonca - najbardziej
+// rozpoznawalny kadr ma byc od pierwszej sekundy, nie od drugiego okrazenia.
+// Jezdnia, krawedz i HUD zostaja nasze. Bierzemy klimat (kolory, palmy,
+// ocean, promenada), nie szate graficzna Rockstara.
 const SEASONS = [
-  { name: 'POŁUDNIE', grass: '#F2E3C4', grassAlt: '#ECDBB8',
-    palm: '#2F8F6B', trunk: '#9C7A55', sky: ['#2FA8D5', '#9EE0EC', '#FFF4DC'],
-    sun: { y: 0.22, r: 0.045, c1: '#FFFBE6', c2: '#FFE08A', stripes: false },
-    sea: '#22A9C4', city: 'rgba(40,70,110,0.20)', fog: '#FFF4DC', ink: INK, night: false },
-  { name: 'ZACHÓD SŁOŃCA', grass: '#E9B49A', grassAlt: '#E2A98E',
+  { name: 'ZACHÓD SŁOŃCA', grass: '#E9B49A', grassAlt: '#E2A98E', walk: '#F3C9B4', curb: '#FFFFFF',
     palm: '#3A1A4F', trunk: '#3A1A4F', sky: ['#4B2A7B', '#FF5FA2', '#FFB25B'],
     sun: { y: 0.44, r: 0.12, c1: '#FFE66B', c2: '#FF4F8B', stripes: true },
     sea: '#7A3D8F', city: 'rgba(58,26,79,0.80)', fog: '#FFB89A', ink: INK, night: false },
-  { name: 'NEONOWA NOC', grass: '#1B1233', grassAlt: '#160E2B',
+  { name: 'NEONOWA NOC', grass: '#1B1233', grassAlt: '#160E2B', walk: '#34264F', curb: '#FF5FA2',
     palm: '#0B0618', trunk: '#0B0618', sky: ['#07051A', '#24104A', '#6A1E73'],
     sun: null, sea: '#120A2E', city: 'rgba(10,6,28,0.96)', fog: '#2A1240', ink: PAPER, night: true },
-  { name: 'ŚWIT', grass: '#F0DCCB', grassAlt: '#EAD2BF',
+  { name: 'ŚWIT', grass: '#F0DCCB', grassAlt: '#EAD2BF', walk: '#F7E6DA', curb: '#FFFFFF',
     palm: '#6C5A8E', trunk: '#6C5A8E', sky: ['#8FBCE6', '#F7C6DA', '#FFE2B8'],
     sun: { y: 0.45, r: 0.055, c1: '#FFF3D1', c2: '#FFC9A8', stripes: false },
-    sea: '#8FB7D9', city: 'rgba(108,90,142,0.35)', fog: '#FFE9D2', ink: INK, night: false }
+    sea: '#8FB7D9', city: 'rgba(108,90,142,0.35)', fog: '#FFE9D2', ink: INK, night: false },
+  { name: 'POŁUDNIE', grass: '#F2E3C4', grassAlt: '#ECDBB8', walk: '#FAF1E2', curb: '#FFFFFF',
+    palm: '#2F8F6B', trunk: '#9C7A55', sky: ['#2FA8D5', '#9EE0EC', '#FFF4DC'],
+    sun: { y: 0.22, r: 0.045, c1: '#FFFBE6', c2: '#FFE08A', stripes: false },
+    sea: '#22A9C4', city: 'rgba(40,70,110,0.20)', fog: '#FFF4DC', ink: INK, night: false }
 ];
 let season = SEASONS[0];
-// Ekran tytulowy zawsze o zachodzie - to najbardziej rozpoznawalny kadr.
-const ATTRACT_TIME = SEASONS[1];
+// Ekran tytulowy o zachodzie - jak pierwsze okrazenie.
+const ATTRACT_TIME = SEASONS[0];
 
 // Segmenty trzymaja referencje do obiektow z COLORS, wiec wystarczy
 // podmienic w nich kolor trawy - cala trasa zmienia sie w jednej klatce.
@@ -631,6 +634,71 @@ function drawTree(ctx, x, y, w, h) {
   ctx.fill();
 }
 
+// Barierka promenady: biale slupki i dwie poprzeczki. W nocy neonowa.
+function drawRail(ctx, x, y, w, h) {
+  ctx.fillStyle = season.night ? '#FF5FA2' : '#FFFFFF';
+  ctx.fillRect(x, y + h * 0.10, w, h * 0.12);
+  ctx.fillRect(x, y + h * 0.45, w, h * 0.10);
+  ctx.fillStyle = season.night ? '#7A2A6A' : '#C9CED8';
+  for (let i = 0; i < 4; i++) ctx.fillRect(x + w * (0.02 + i * 0.31), y, w * 0.06, h);
+}
+
+// Piesi na promenadzie - plaska grafika jak reszta gry, kolory z wakacyjnej
+// palety. Nogi chodzacych ruszaja sie w czasie (t = performance.now()).
+const WALKER_SHIRTS = ['#FF5FA2', '#2EC4B6', '#FFD23F', '#FFFFFF', '#FF8C42', '#7B5CD6', '#3FE0F0'];
+const WALKER_SKIN = ['#F1C7A3', '#E0AC83', '#C68E5E', '#8D5A3B', '#5C3A26'];
+const WALKER_PANTS = ['#2B4C7E', '#E8E1D3', '#121212', '#4A8F6B', '#F4F4F4'];
+function makeWalker() {
+  const look = {
+    shirt: pick(WALKER_SHIRTS), skin: pick(WALKER_SKIN), pants: pick(WALKER_PANTS),
+    hat: Math.random() < 0.35 ? pick(['#FFFFFF', '#FFD23F', '#121212']) : null,
+    shades: Math.random() < 0.5, phone: Math.random() < 0.25,
+    walk: Math.random() < 0.75, phase: Math.random() * 6.28, dir: Math.random() < 0.5 ? -1 : 1,
+    pattern: Math.random() < 0.3   // koszula w kwiaty
+  };
+  return { w: 300, h: 760, draw: (c, x, y, w, h, t) => drawWalker(c, x, y, w, h, t, look) };
+}
+function drawWalker(ctx, x, y, w, h, t, k) {
+  const cx = x + w / 2;
+  const swing = k.walk ? Math.sin((t || 0) * 0.008 + k.phase) : 0;
+  // nogi
+  ctx.fillStyle = k.skin;
+  ctx.fillRect(cx - w * 0.16 + swing * w * 0.10, y + h * 0.62, w * 0.12, h * 0.36);
+  ctx.fillRect(cx + w * 0.04 - swing * w * 0.10, y + h * 0.62, w * 0.12, h * 0.36);
+  // szorty
+  ctx.fillStyle = k.pants;
+  ctx.fillRect(cx - w * 0.20, y + h * 0.52, w * 0.40, h * 0.16);
+  // tulow
+  ctx.fillStyle = k.shirt;
+  ctx.fillRect(cx - w * 0.24, y + h * 0.22, w * 0.48, h * 0.32);
+  if (k.pattern) {
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    for (let i = 0; i < 5; i++) ctx.fillRect(cx - w * 0.18 + (i % 3) * w * 0.14, y + h * (0.26 + Math.floor(i / 3) * 0.12), w * 0.06, h * 0.03);
+  }
+  // rece
+  ctx.fillStyle = k.skin;
+  ctx.fillRect(cx - w * 0.34, y + h * 0.24 - swing * h * 0.02, w * 0.10, h * 0.26);
+  if (k.phone) {
+    ctx.fillRect(cx + w * 0.24, y + h * 0.10, w * 0.10, h * 0.20);
+    ctx.fillStyle = '#121212';
+    ctx.fillRect(cx + w * 0.22, y + h * 0.07, w * 0.10, h * 0.07);
+  } else {
+    ctx.fillRect(cx + w * 0.24, y + h * 0.24 + swing * h * 0.02, w * 0.10, h * 0.26);
+  }
+  // glowa
+  ctx.fillStyle = k.skin;
+  ctx.fillRect(cx - w * 0.14, y + h * 0.04, w * 0.28, h * 0.17);
+  if (k.shades) {
+    ctx.fillStyle = '#121212';
+    ctx.fillRect(cx - w * 0.14, y + h * 0.10, w * 0.28, h * 0.035);
+  }
+  if (k.hat) {
+    ctx.fillStyle = k.hat;
+    ctx.fillRect(cx - w * 0.22, y + h * 0.03, w * 0.44, h * 0.025);
+    ctx.fillRect(cx - w * 0.14, y, w * 0.28, h * 0.04);
+  }
+}
+
 function drawLamp(ctx, x, y, w, h, flip) {
   ctx.save();
   if (flip) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.translate(-x, -y); }
@@ -707,6 +775,7 @@ const SPR = {
   lampL:     { w: 900,  h: 2400, draw: (c,x,y,w,h) => drawLamp(c,x,y,w,h,false) },
   lampR:     { w: 900,  h: 2400, draw: (c,x,y,w,h) => drawLamp(c,x,y,w,h,true) },
   billboard: { w: 2600, h: 1700, draw: drawBillboard },
+  rail:      { w: 900,  h: 260,  draw: drawRail },
   gantry:    { w: 5600, h: 2100, draw: drawGantry }
 };
 
@@ -811,12 +880,30 @@ function addLowRollingHills(n, h) {
   addRoad(n, n, n, 0, 0);
 }
 
+// Promenada: odcinki z chodnikiem, pieszymi i barierka, przez ktora nie da
+// sie przejechac. Pierwsza zaczyna sie zaraz po starcie, zeby klimat bylo
+// czuc od pierwszych sekund.
+const PROMENADE = { every: 380, len: 130, first: 30 };
+function isPromenade(i) {
+  return i >= PROMENADE.first && (i - PROMENADE.first) % PROMENADE.every < PROMENADE.len;
+}
+
 function addScenery() {
   const n = segments.length;
   // pobocze: drzewa, lampy, billboardy
   for (let i = 20; i < n - 20; i++) {
     const s = segments[i];
-    if (i % 40 === 0) {
+    if (isPromenade(i)) {
+      s.promenade = true;
+      if (i % 3 === 0) {
+        s.sprites.push({ sprite: SPR.rail, offset: -1.2 });
+        s.sprites.push({ sprite: SPR.rail, offset: 1.2 });
+      }
+      for (const side of [-1, 1]) {
+        if (Math.random() < 0.28) s.sprites.push({ sprite: makeWalker(), offset: side * rnd(1.4, 1.75) });
+      }
+    }
+    if (i % 40 === 0 && !s.promenade) {
       s.sprites.push({ sprite: SPR.lampL, offset: -1.3 });
       s.sprites.push({ sprite: SPR.lampR, offset: 1.3 });
     }
@@ -1156,13 +1243,24 @@ function polygon(x1, y1, x2, y2, x3, y3, x4, y4, color) {
   ctx.closePath(); ctx.fill();
 }
 
-function renderSegment(x1, y1, w1, x2, y2, w2, color) {
+function renderSegment(x1, y1, w1, x2, y2, w2, color, promenade) {
   const lanes = CFG.lanes;
   const r1 = w1 / 14, r2 = w2 / 14;
   const l1 = w1 / Math.max(32, 8 * lanes), l2 = w2 / Math.max(32, 8 * lanes);
 
   ctx.fillStyle = color.grass;
   ctx.fillRect(0, y2, W, y1 - y2);
+
+  if (promenade) {
+    // chodnik po obu stronach, od krawedzi do ~1.9 szerokosci jezdni
+    const o1 = w1 * 1.9, o2 = w2 * 1.9;
+    polygon(x1 - o1, y1, x1 - w1, y1, x2 - w2, y2, x2 - o2, y2, season.walk);
+    polygon(x1 + w1, y1, x1 + o1, y1, x2 + o2, y2, x2 + w2, y2, season.walk);
+    // kraweznik na zewnatrz chodnika
+    const c1 = w1 * 0.03, c2 = w2 * 0.03;
+    polygon(x1 - o1 - c1, y1, x1 - o1, y1, x2 - o2, y2, x2 - o2 - c2, y2, season.curb);
+    polygon(x1 + o1, y1, x1 + o1 + c1, y1, x2 + o2 + c2, y2, x2 + o2, y2, season.curb);
+  }
 
   polygon(x1 - w1 - r1, y1, x1 - w1, y1, x2 - w2, y2, x2 - w2 - r2, y2, color.rumble);
   polygon(x1 + w1 + r1, y1, x1 + w1, y1, x2 + w2, y2, x2 + w2 + r2, y2, color.rumble);
@@ -1361,7 +1459,7 @@ function render() {
     if (seg.p1.camera.z <= cameraDepth || seg.p2.screen.y >= seg.p1.screen.y || seg.p2.screen.y >= maxy) continue;
 
     renderSegment(seg.p1.screen.x, seg.p1.screen.y, seg.p1.screen.w,
-                  seg.p2.screen.x, seg.p2.screen.y, seg.p2.screen.w, seg.color);
+                  seg.p2.screen.x, seg.p2.screen.y, seg.p2.screen.w, seg.color, seg.promenade);
 
     if (seg.fog < 1) {
       ctx.globalAlpha = 1 - seg.fog;
@@ -2103,7 +2201,7 @@ function updatePlay(dt) {
 
   // skret + sila odsrodkowa
   player.x += Input.steer * dx;
-  player.x -= dx * speedPct * playerSegment.curve * CFG.centrifugal;
+  player.x -= dx * Math.min(speedPct, 1) * playerSegment.curve * CFG.centrifugal;
 
   // zegar wyscigu
   player.raceT += dt;
@@ -2120,9 +2218,10 @@ function updatePlay(dt) {
 
   // gaz / hamulec; turbo pcha auto samo, nawet bez gazu
   if (player.turbo > 0 && Input.brake <= 0.05) {
-    player.speed = accelToward(player.speed, cap, accelRate * 2.4, dt);
+    player.speed = accelToward(player.speed, cap, accelRate * TURBO.push, dt);
   } else if (player.speed > cap) {
-    player.speed = Math.max(cap, player.speed + decelRate * 1.5 * dt);
+    // po turbo auto zwalnia lagodnie, bez szarpniecia
+    player.speed = Math.max(cap, player.speed + decelRate * TURBO.fade * dt);
   } else if (Input.accel > 0.05) {
     player.speed = accelToward(player.speed, cap * Input.accel, accelRate, dt);
   } else if (Input.brake > 0.05) {
@@ -2139,6 +2238,21 @@ function updatePlay(dt) {
     player.battery = Math.max(0, player.battery - 4 * dt);
   }
   player.x = clamp(player.x, -2.6, 2.6);
+
+  // Barierka promenady trzyma auto na jezdni - piesi sa bezpieczni, a kto
+  // sie o nia otrze, traci predkosc.
+  if (playerSegment.promenade && Math.abs(player.x) > 1.05) {
+    const side = Math.sign(player.x);
+    player.x = side * 1.0;
+    if (player.hitCooldown <= 0) {
+      player.speed *= 0.6;
+      player.turbo = 0;
+      player.shake = 10;
+      player.hitCooldown = 0.6;
+      Sfx.crash();
+      addPopup('BARIERKA', '#D93025', false);
+    }
+  }
 
   // kolizje z autami
   if (player.hitCooldown <= 0) {
