@@ -2,16 +2,15 @@
 // ADMIN_TOKEN i domyslnie tylko pokazuje, co by usunal - skasowanie trzeba
 // potwierdzic osobno. W trakcie targow pomylka kosztuje tu za duzo.
 
-const { kvReady, kv, json } = require('./_store.js');
+const { kvReady, kv, json, BOARD_KEY } = require('./_store.js');
 
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
-const BOARD_KEY = 'ampererush:board';
 
 // Sprzatanie po testach sprzed targow. Data jest wpisana na sztywno, wiec
-// ten tryb nie tknie zadnego wyniku z 23-25.09 nawet, gdyby ktos obcy
+// ten tryb nie tknie zadnego wyniku z 01-03.12 (e-Mobility) nawet, gdyby ktos obcy
 // trafil na adres - a powtorne wywolanie niczego nie zmienia. Dzieki temu
 // dziala bez hasla, gdy nie ma dostepu do panelu.
-const PRZED_TARGAMI = Date.parse('2026-09-22T22:00:00.000Z');   // 23.09, 00:00 czasu lokalnego
+const PRZED_TARGAMI = Date.parse('2026-11-30T23:00:00.000Z');   // 01.12, 00:00 czasu lokalnego
 
 function entryTime(e) {
   return Date.parse(e.claimedAt || e.playedAt || '') || 0;
@@ -55,7 +54,7 @@ async function handler(req, res) {
   if (q.confirm !== '1') {
     return json(res, 200, {
       tryb: 'podglad',
-      zakres: authorized ? 'pelny (z haslem)' : 'tylko wpisy sprzed 23.09',
+      zakres: authorized ? 'pelny (z haslem)' : 'tylko wpisy sprzed 01.12',
       doUsuniecia: summary(doomed),
       zostanie: summary(rows.filter((r) => !doomed.includes(r))),
       hint: 'Dodaj &confirm=1 do adresu, zeby naprawde usunac.'

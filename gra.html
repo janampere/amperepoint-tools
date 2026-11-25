@@ -104,8 +104,9 @@ function loadImg(src) {
 const imgPrime = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Wallbox_MAIN_23_2c3bb7e1-da33-45ed-bcdb-d729a42035f4.jpg?v=1787313349&width=320');
 const imgQ11 = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Q11_2ba5f7ed-4505-43b8-b2cc-928fbe90ddc7.png?v=1788339617&width=320');
 // Zdjecie Omody leci tylko do banera nagrody - to kadr z tlem, wiec jako
-// sprite na jezdni wygladalby jak latajacy prostokat.
-const imgOmoda = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/omoda-9-tyl-1024x517.webp?v=1758536871&width=640');
+// sprite na jezdni wygladalby jak latajacy prostokat. Na e-Mobility Omoda 5
+// (biala, na sniegu - grudzien), na KNM byla Omoda 9.
+const imgOmoda = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/omoda_5_ladowanie_gniazdo_ladowania_ampere_point_2.png?v=1768399582&width=640');
 
 // Zdjecia nagrod na ekran tytulowy - to one maja zatrzymac przechodzacego.
 const imgSeriaB = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/ampere_point_b35_ladowarka_Schuko_230V_1.jpg?v=1765364614&width=480');
@@ -138,7 +139,7 @@ const offRoadLimit = maxSpeed / 3.4;
 // czyli dwa razy tyle - stad wrazenie, ze inni jezdza czolgami.
 const PLAYER_W = 480;
 const TRAFFIC_W = 500;
-const OMODA_LEVEL = 9;
+const OMODA_LEVEL = 5;
 const LIVES = 4;
 
 // Kazde okrazenie to nowy poziom. Rosnie predkosc, ruch i zuzycie pradu,
@@ -664,9 +665,9 @@ const CAR_SKINS = [
   { body: '#5C6370', roof: '#474D58', glass: '#15181D', light: '#C2401F' }
 ];
 const PLAYER_SKIN = { body: BRAND, roof: '#E55F00', glass: INK, light: PAPER };
-const OMODA_SKIN = { body: '#4A5262', roof: '#242A33', glass: '#0D1117', light: '#C2401F' };
+const OMODA_SKIN = { body: '#E9EAEC', roof: '#C9CCD2', glass: '#0D1117', light: '#C2401F' };
 
-// Nagroda za dojechanie do 9. okrazenia. SUV, wiec wyzsza bryla i
+// Nagroda za dojechanie do 5. okrazenia. SUV, wiec wyzsza bryla i
 // charakterystyczny pasek swiatel przez cala szerokosc tylu.
 function drawOmoda(ctx, x, y, w, h, c, opts) {
   opts = opts || {};
@@ -898,7 +899,7 @@ let initials = ['A', 'A', 'A'];
 let initialIdx = 0;
 let pendingRank = -1;
 
-const LS_KEY = 'ampere_rush_scores_v1';
+const LS_KEY = 'ampere_rush_scores_emobility2026';   // nowy klucz = czysta lokalna tablica na nowe targi
 let scores = [];
 
 // --------------------------------------------------------- tablica zdalna
@@ -929,6 +930,18 @@ async function fetchBoard() {
     remoteBoard = null;
   }
 }
+
+// Podium z poprzednich targow. Pobierane raz - te wyniki juz sie nie zmienia.
+let prevBoard = null;
+async function fetchPrevBoard() {
+  try {
+    const r = await fetch('/api/board?edition=knm2026&limit=3');
+    if (!r.ok) return;
+    const data = await r.json();
+    if (Array.isArray(data.board)) prevBoard = data.board;
+  } catch (e) { /* offline - po prostu bez tej linijki */ }
+}
+fetchPrevBoard();
 
 function boardRows() {
   if (remoteBoard && remoteBoard.length) {
@@ -1469,13 +1482,13 @@ function renderHUD() {
     ctx.fillRect(0, by + bh - u * 1.2, W, u * 1.2);
 
     if (reward) {
-      text('OMODA 9 ODBLOKOWANA', W / 2, by + u * 7,
+      text('OMODA 5 ODBLOKOWANA', W / 2, by + u * 7,
            { size: u * 6.4, color: PAPER, align: 'center', spacing: 5, weight: 900 });
       if (withPhoto) {
         const ph = u * 18, pw = ph * (imgOmoda.img.naturalWidth / imgOmoda.img.naturalHeight);
         ctx.drawImage(imgOmoda.img, W / 2 - pw / 2, by + u * 10, pw, ph);
       }
-      text('NOWA FURA · LEVEL 9', W / 2, by + bh - u * 3.4,
+      text('NOWA FURA · LEVEL ' + OMODA_LEVEL, W / 2, by + bh - u * 3.4,
            { size: u * 2.2, color: BRAND, align: 'center', spacing: 4 });
     } else {
       text('LEVEL ' + player.level, W / 2, by + u * 8,
@@ -1543,9 +1556,9 @@ function renderControlsHint(cx, cy, u) {
 const PLACES = 7;
 // Po jednym wierszu na miejsce, zeby rzedy obu tabel sie pokrywaly.
 const PRIZES = [
-  'Ładowarka serii Q',
-  'Ładowarka serii B',
-  'Ładowarka serii B',
+  'Gra GTA VI',
+  'Ładowarka B35',
+  'Ładowarka B35',
   'Dr. Storm',
   'Dr. Storm',
   'Dr. Storm',
@@ -1607,10 +1620,27 @@ function renderPrizes(cx, top, u) {
 // wiekszosc czasu oglada ktos, kto przechodzi obok - tabela wynikow mu nic
 // nie mowi, zdjecie ladowarki i slowo "wygraj" mowi wszystko.
 const PRIZE_CARDS = [
-  { pos: '1. MIEJSCE', name: 'Ładowarka serii Q', img: () => imgQ11, fallback: q11Icon },
-  { pos: '2-3. MIEJSCE', name: 'Ładowarka serii B', img: () => imgSeriaB, fallback: primeIcon },
+  { pos: '1. MIEJSCE', name: 'Gra GTA VI', img: () => NO_IMG, fallback: gtaIcon },
+  { pos: '2-3. MIEJSCE', name: 'Ładowarka B35', img: () => imgSeriaB, fallback: primeIcon },
   { pos: '4-7. MIEJSCE', name: 'Dr. Storm', img: () => imgStorm, fallback: q11Icon }
 ];
+
+// GTA VI bez zdjecia okladki - grafika Rockstara nie jest nasza. Typograficzny
+// kafel w barwach gry robi to samo: kazdy wie, o co chodzi.
+const NO_IMG = { ready: false };
+function gtaIcon(ctx, x, y, w, h) {
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, '#FF5FA2'); g.addColorStop(0.55, '#F78C3B'); g.addColorStop(1, '#5B2A86');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '900 ' + (h * 0.30) + 'px Inter, Arial, sans-serif';
+  ctx.fillText('GTA', x + w / 2, y + h * 0.50);
+  ctx.font = '900 ' + (h * 0.34) + 'px Inter, Arial, sans-serif';
+  ctx.fillText('VI', x + w / 2, y + h * 0.86);
+  ctx.textAlign = 'left';
+}
 
 // Trzecia kolumna: zdjecia nagrod jedno pod drugim. Zdjecie produktu mowi
 // przechodzacemu wiecej niz nazwa w tabeli.
@@ -1649,6 +1679,17 @@ function renderPrizePhotos(x, top, u) {
   });
 }
 
+// Wyniki z KNM Katowice zostaja na ekranie jako ciekawostka - jedna linijka
+// z podium, bez nagrod. Nowa tablica startuje od zera.
+function renderPrevEdition(cx, y, u) {
+  if (!prevBoard || !prevBoard.length) return;
+  const podium = prevBoard.slice(0, 3)
+    .map((r, i) => (i + 1) + '. ' + r.nick + ' ' + String(r.score).padStart(6, '0'))
+    .join('     ');
+  text('POPRZEDNIA EDYCJA · KNM KATOWICE 2026     ' + podium, cx, y,
+       { size: u * 1.5, color: MUTED, align: 'center', mono: true, spacing: 1 });
+}
+
 function renderAttract() {
   const u = Math.min(W, H) / 100;
   ctx.fillStyle = 'rgba(255,255,255,0.86)';
@@ -1659,20 +1700,20 @@ function renderAttract() {
   // pasek wydarzenia
   ctx.fillStyle = INK;
   ctx.fillRect(0, 0, W, u * 5);
-  text('NEW MOBILITY CONGRESS 2026', W / 2 - u * 1.5, u * 3.3,
+  text('E-MOBILITY 2026 · STOISKO D12', W / 2 - u * 1.5, u * 3.3,
        { size: u * 1.6, color: PAPER, align: 'right', spacing: 3 });
   ctx.fillStyle = BRAND;
   ctx.fillRect(W / 2 - u * 0.4, u * 1.6, u * 0.8, u * 1.8);
-  text('MCK KATOWICE', W / 2 + u * 1.5, u * 3.3,
+  text('PTAK WARSAW EXPO', W / 2 + u * 1.5, u * 3.3,
        { size: u * 1.6, color: BRAND, align: 'left', spacing: 3 });
 
   logo(W / 2, H * 0.093, u * 3.2, 'center');
 
-  text('WYGRAJ ŁADOWARKĘ', W / 2, H * 0.21,
+  text('WYGRAJ GTA VI', W / 2, H * 0.21,
        { size: u * 9, color: INK, align: 'center', spacing: 2, weight: 900 });
   ctx.fillStyle = BRAND;
   ctx.fillRect(W / 2 - u * 22, H * 0.243, u * 44, u * 0.9);
-  text('AMPERE RUSH · 7 NAGRÓD DO ZGARNIĘCIA', W / 2, H * 0.285,
+  text('AMPERE RUSH · GTA VI, ŁADOWARKI B35 I DR. STORM', W / 2, H * 0.285,
        { size: u * 2.2, color: MUTED, align: 'center', spacing: 4 });
 
   // Trzy kolumny: wyniki, tabela nagrod, zdjecia. Przy waskim oknie caly
@@ -1687,6 +1728,8 @@ function renderAttract() {
   renderPrizes(cx + (TABLE_W / 2) * uu, top, uu);
   cx += (TABLE_W + GAP) * uu;
   renderPrizePhotos(cx, top, uu);
+
+  renderPrevEdition(W / 2, H * 0.715, uu);
 
   text('zostaw e-mail po grze, żeby wziąć udział w losowaniu  ·  ' +
        (IS_TOUCH ? 'dotykaj lewej i prawej strony ekranu' : 'pad: drążek skręca, RT gazuje'),

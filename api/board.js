@@ -1,18 +1,22 @@
 // Tablica wynikow dla duzego ekranu. Kiosk odpytuje ja co minute.
 
-const { kvReady, topBoard, nickKey, json } = require('./_store.js');
+const { kvReady, topBoard, nickKey, json, BOARD_KEY, EDITIONS } = require('./_store.js');
 
 async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { error: 'method_not_allowed' });
   if (!kvReady) return json(res, 503, { error: 'not_configured' });
 
+  // ?edition=knm2026 - tablica z poprzednich targow, tylko do wgladu.
+  const edition = String((req.query && req.query.edition) || '');
+  if (edition && !EDITIONS[edition]) return json(res, 400, { error: 'unknown_edition' });
+  const key = edition ? EDITIONS[edition] : BOARD_KEY;
   const limit = Math.max(1, Math.min(20, parseInt(req.query && req.query.limit, 10) || 10));
   try {
     // Jedna osoba moze wygrac tylko jedna nagrode, wiec na tablicy zostaje
     // jej najlepszy przejazd. Odsiewamy przy odczycie, a nie przy zapisie -
     // dzieki temu porzadkuje to takze duplikaty juz zapisane w bazie.
     // Pobieramy z zapasem, bo czesc wierszy wypadnie.
-    const rows = await topBoard(Math.min(80, limit * 8));
+    const rows = await topBoard(Math.min(80, limit * 8), key);
     const best = new Map();
     for (const r of rows) {
       const key = nickKey(r.nick);

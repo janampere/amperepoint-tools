@@ -20,7 +20,10 @@ const KV_URL = urlEnv.value;
 const KV_TOKEN = tokenEnv.value;
 const kvEnvNames = { url: urlEnv.name, token: tokenEnv.name };
 
-const BOARD_KEY = 'ampererush:board';
+// Kazde targi maja wlasna tablice. Stary klucz bez przyrostka to KNM
+// Katowice 2026 - zostaje nietkniety i jest pokazywany jako poprzednia edycja.
+const BOARD_KEY = 'ampererush:board:emobility2026';
+const EDITIONS = { knm2026: 'ampererush:board' };
 const RUN_TTL = 60 * 60 * 24;   // kod przejazdu wazny dobe
 
 const kvReady = Boolean(KV_URL && KV_TOKEN);
@@ -64,8 +67,8 @@ async function addToBoard(entry) {
   await kv(['ZADD', BOARD_KEY, String(entry.score), JSON.stringify(entry)]);
 }
 
-async function topBoard(limit = 10) {
-  const rows = await kv(['ZRANGE', BOARD_KEY, '0', String(limit - 1), 'REV']);
+async function topBoard(limit = 10, key = BOARD_KEY) {
+  const rows = await kv(['ZRANGE', key, '0', String(limit - 1), 'REV']);
   if (!Array.isArray(rows)) return [];
   return rows.map((r) => { try { return JSON.parse(r); } catch (e) { return null; } }).filter(Boolean);
 }
@@ -108,6 +111,6 @@ function json(res, status, payload) {
 }
 
 module.exports = {
-  kvReady, kv, kvEnvNames, makeCode, runKey, saveRun, loadRun, addToBoard, topBoard,
+  BOARD_KEY, EDITIONS, kvReady, kv, kvEnvNames, makeCode, runKey, saveRun, loadRun, addToBoard, topBoard,
   cleanNick, nickKey, cleanEmail, readBody, json
 };

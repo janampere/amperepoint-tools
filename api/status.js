@@ -60,7 +60,7 @@ async function writeTestRow() {
     return await toSheetDebug({
       nick: 'TEST', email: '', consent: false, score: 0, distance: 0,
       pickups: 0, level: 1, code: 'TEST', playedAt: new Date().toISOString(),
-      event: (process.env.EVENT_TAG || 'KNM 2026 Katowice') + ' (wiersz testowy)'
+      event: (process.env.EVENT_TAG || 'e-Mobility 2026 Nadarzyn') + ' (wiersz testowy)'
     });
   } catch (e) {
     return { error: String(e.message || e) };
@@ -72,7 +72,7 @@ async function handler(req, res) {
     // Nazwy zmiennych nie sa tajne, a bez nich nie da sie zdalnie ustalic,
     // czy Vercel wstrzyknal to, co trzeba.
     kv: { configured: kvReady, reachable: false, usingEnv: kvEnvNames },
-    event: process.env.EVENT_TAG || 'KNM 2026 Katowice'
+    event: process.env.EVENT_TAG || 'e-Mobility 2026 Nadarzyn'
   };
 
   if (kvReady) {

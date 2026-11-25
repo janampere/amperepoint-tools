@@ -8,7 +8,7 @@ const {
 
 const PIPEDRIVE_TOKEN = process.env.PIPEDRIVE_TOKEN;
 const SHEET_WEBHOOK_URL = process.env.SHEET_WEBHOOK_URL;
-const EVENT_TAG = process.env.EVENT_TAG || 'KNM 2026 Katowice';
+const EVENT_TAG = process.env.EVENT_TAG || 'e-Mobility 2026 Nadarzyn';
 // Apps Script po wdrozeniu budzi sie wolno (zimny start + otwarcie arkusza),
 // wiec 8 s bylo za malo i konczylo sie zerwaniem polaczenia mimo udanego
 // zapisu. Przy nagrzanym skrypcie zapytanie wraca w 1-3 s.
