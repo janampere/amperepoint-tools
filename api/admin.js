@@ -28,7 +28,7 @@ async function handler(req, res) {
 
   let raw;
   try {
-    raw = await kv(['ZRANGE', BOARD_KEY, '0', '-1', 'REV']);
+    raw = await kv(['ZRANGE', BOARD_KEY, '0', '-1']);
   } catch (e) {
     return json(res, 503, { error: 'store_unavailable' });
   }

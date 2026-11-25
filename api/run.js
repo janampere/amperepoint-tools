@@ -23,7 +23,10 @@ async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method_not_allowed' });
 
   const b = readBody(req);
-  const score = Math.max(0, Math.min(9999999, Math.floor(Number(b.score) || 0)));
+  // score = czas przejazdu 3 okrazen w ms. Ponizej 30 s fizycznie sie nie da,
+  // powyzej limitu 5 min gra nie wysyla wyniku.
+  const score = Math.floor(Number(b.score) || 0);
+  if (score < 30000 || score > 300000) return json(res, 400, { error: 'bad_time' });
   const distance = Math.max(0, Math.min(9999999, Math.floor(Number(b.distance) || 0)));
   const pickups = Math.max(0, Math.min(9999, Math.floor(Number(b.pickups) || 0)));
   const level = Math.max(1, Math.min(999, Math.floor(Number(b.level) || 1)));

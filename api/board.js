@@ -16,16 +16,17 @@ async function handler(req, res) {
     // jej najlepszy przejazd. Odsiewamy przy odczycie, a nie przy zapisie -
     // dzieki temu porzadkuje to takze duplikaty juz zapisane w bazie.
     // Pobieramy z zapasem, bo czesc wierszy wypadnie.
-    const rows = await topBoard(Math.min(80, limit * 8), key);
+    const rows = await topBoard(Math.min(80, limit * 8), key, Boolean(edition));
+    const better = edition ? (a, b) => a > b : (a, b) => a < b;
     const best = new Map();
     for (const r of rows) {
       const key = nickKey(r.nick);
       if (!key) continue;
       const prev = best.get(key);
-      if (!prev || Number(r.score) > Number(prev.score)) best.set(key, r);
+      if (!prev || better(Number(r.score), Number(prev.score))) best.set(key, r);
     }
     const board = [...best.values()]
-      .sort((a, b) => Number(b.score) - Number(a.score))
+      .sort((a, b) => (better(Number(a.score), Number(b.score)) ? -1 : 1))
       .slice(0, limit)
       .map((r) => ({
         nick: r.nick, score: r.score, level: r.level || 1, playedAt: r.playedAt

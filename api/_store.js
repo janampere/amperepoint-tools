@@ -67,8 +67,12 @@ async function addToBoard(entry) {
   await kv(['ZADD', BOARD_KEY, String(entry.score), JSON.stringify(entry)]);
 }
 
-async function topBoard(limit = 10, key = BOARD_KEY) {
-  const rows = await kv(['ZRANGE', key, '0', String(limit - 1), 'REV']);
+// Od e-Mobility wynik to czas w ms - lepszy jest nizszy, wiec czytamy rosnaco.
+// Stara tablica KNM to punkty: tam malejaco (desc = true).
+async function topBoard(limit = 10, key = BOARD_KEY, desc = false) {
+  const cmd = ['ZRANGE', key, '0', String(limit - 1)];
+  if (desc) cmd.push('REV');
+  const rows = await kv(cmd);
   if (!Array.isArray(rows)) return [];
   return rows.map((r) => { try { return JSON.parse(r); } catch (e) { return null; } }).filter(Boolean);
 }

@@ -8,6 +8,12 @@ const {
 
 const PIPEDRIVE_TOKEN = process.env.PIPEDRIVE_TOKEN;
 const SHEET_WEBHOOK_URL = process.env.SHEET_WEBHOOK_URL;
+// 151234 ms -> "2:31.2"
+function fmtTime(ms) {
+  const t = Math.floor(Number(ms) / 100);
+  return Math.floor(t / 600) + ':' + String(Math.floor((t % 600) / 10)).padStart(2, '0') + '.' + (t % 10);
+}
+
 const EVENT_TAG = process.env.EVENT_TAG || 'e-Mobility 2026 Nadarzyn';
 // Apps Script po wdrozeniu budzi sie wolno (zimny start + otwarcie arkusza),
 // wiec 8 s bylo za malo i konczylo sie zerwaniem polaczenia mimo udanego
@@ -52,8 +58,7 @@ async function toPipedrive(entry) {
 
   await call('/notes', {
     content: 'Ampere Rush (' + EVENT_TAG + ')<br>Nick: ' + entry.nick +
-             '<br>Wynik: ' + entry.score + '<br>Dystans: ' + entry.distance + ' m' +
-             '<br>Poziom: ' + entry.level +
+             '<br>Czas (3 okrazenia): ' + fmtTime(entry.score) + '<br>Dystans: ' + entry.distance + ' m' +
              '<br>Ładowarki: ' + entry.pickups,
     person_id: personId,
     lead_id: leadId || undefined
@@ -135,7 +140,7 @@ async function handler(req, res) {
   delivery.sheet = sh.status === 'fulfilled' ? sh.value : 'failed';
   if (pd) delivery.pipedrive = pd.status === 'fulfilled' ? pd.value : 'failed';
 
-  return json(res, 200, { ok: true, nick, score: entry.score, delivery });
+  return json(res, 200, { ok: true, nick, score: entry.score, time: fmtTime(entry.score), delivery });
 }
 
 module.exports = handler;

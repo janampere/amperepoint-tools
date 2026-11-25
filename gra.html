@@ -139,8 +139,25 @@ const offRoadLimit = maxSpeed / 3.4;
 // czyli dwa razy tyle - stad wrazenie, ze inni jezdza czolgami.
 const PLAYER_W = 480;
 const TRAFFIC_W = 500;
-const OMODA_LEVEL = 5;
-const LIVES = 4;
+const OMODA_LEVEL = 3;   // ostatnie okrazenie jedzie sie Omoda - final wyscigu
+
+// Wyscig na czas: 3 okrazenia, wygrywa najkrotszy czas. Na KNM gralo sie na
+// punkty bez konca i rekordzisci zajmowali stanowisko po godzinie.
+const RACE = { laps: 3, maxSec: 300 };   // po 5 minutach przejazd sie konczy bez czasu
+// Ladowarka = doladowanie baterii i turbo. Seria ladowarek wydluza turbo.
+const TURBO = { mult: 1.35, base: 2.2, perStreak: 0.6, max: 4.0 };
+const LIMP = 0.45;   // tryb awaryjny przy pustej baterii: ulamek predkosci
+// Bateria schodzi wolniej niz na KNM - tam pusta bateria konczyla gre i
+// napiecie bralo sie z tego. Tu ma tylko zmuszac do zjazdu po ladowarke.
+const DRAIN = 0.6;
+
+// 151234 ms -> "2:31.2"
+function fmtTime(ms) {
+  if (!(ms > 0)) return '-:--.-';
+  const t = Math.floor(ms / 100);
+  const m = Math.floor(t / 600), sec = Math.floor((t % 600) / 10), d = t % 10;
+  return m + ':' + String(sec).padStart(2, '0') + '.' + d;
+}
 
 // Kazde okrazenie to nowy poziom. Rosnie predkosc, ruch i zuzycie pradu,
 // a na trasie budza sie pachołki uspione na starcie - zeby po kilku
@@ -920,8 +937,8 @@ function carSteer(car, carSeg, playerSeg, playerW) {
 // ----------------------------------------------------------------- stan gry
 const player = {
   x: 0, speed: 0, position: 0, travelled: 0,
-  battery: 100, score: 0, pickups: 0, streak: 0, best: 0, level: 1,
-  lives: LIVES, endReason: 'battery',
+  battery: 100, score: 0, pickups: 0, streak: 0, level: 1,
+  raceT: 0, lapT: 0, bestLap: 0, turbo: 0, limp: false, endReason: 'finish',
   hitCooldown: 0, shake: 0, flashBrand: 0, flashRed: 0
 };
 let levelBanner = 0;
@@ -984,14 +1001,14 @@ function boardRows() {
   if (remoteBoard && remoteBoard.length) {
     return remoteBoard.map((r) => ({ name: r.nick, score: r.score, level: r.level }));
   }
-  return scores.slice().sort((a, b) => b.score - a.score);
+  return scores.slice().sort((a, b) => a.score - b.score);
 }
 
 // Ktore miejsce zajalby wynik gracza. Zwraca 0, gdy nie ma z czym porownac.
 function wouldBeRank(score) {
   const rows = boardRows();
   if (!rows.length) return 0;
-  return rows.filter((r) => r.score > score).length + 1;
+  return rows.filter((r) => r.score < score).length + 1;
 }
 
 async function requestRunCode() {
@@ -1009,7 +1026,8 @@ async function requestRunCode() {
       signal: ctl.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        score: Math.floor(player.score),
+        score: Math.floor(player.score),   // czas przejazdu w ms
+        laps: RACE.laps,
         distance: Math.floor(player.travelled / CFG.distDivisor),
         pickups: player.pickups,
         level: player.level
@@ -1067,9 +1085,9 @@ function saveScores() {
   try { localStorage.setItem(LS_KEY, JSON.stringify(scores.slice(0, 10))); } catch (e) {}
 }
 function rankFor(score) {
-  const list = scores.slice().sort((a, b) => b.score - a.score);
+  const list = scores.slice().sort((a, b) => a.score - b.score);
   for (let i = 0; i < 10; i++) {
-    if (!list[i] || score > list[i].score) return i;
+    if (!list[i] || score < list[i].score) return i;
   }
   return -1;
 }
@@ -1085,8 +1103,12 @@ function resetRun() {
   player.streak = 0;
   player.level = 1;
   applySeason(1);
-  player.lives = LIVES;
-  player.endReason = 'battery';
+  player.raceT = 0;
+  player.lapT = 0;
+  player.bestLap = 0;
+  player.turbo = 0;
+  player.limp = false;
+  player.endReason = 'finish';
   levelBanner = 0;
   player.hitCooldown = 0;
   player.shake = 0;
@@ -1404,6 +1426,21 @@ function render() {
     ctx.fillStyle = 'rgba(220,40,40,' + (player.flashRed * 0.45).toFixed(3) + ')';
     ctx.fillRect(0, 0, W, H);
   }
+  if (player.turbo > 0 && state === 'play') {
+    // smugi predkosci od srodka do krawedzi
+    const t = performance.now() * 0.004;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 18; i++) {
+      const a = i * 2.39996 + t;
+      const r0 = Math.min(W, H) * (0.32 + ((t * 3 + i * 0.37) % 1) * 0.3);
+      const r1 = r0 + Math.min(W, H) * 0.12;
+      ctx.beginPath();
+      ctx.moveTo(W / 2 + Math.cos(a) * r0, H * 0.55 + Math.sin(a) * r0 * 0.6);
+      ctx.lineTo(W / 2 + Math.cos(a) * r1, H * 0.55 + Math.sin(a) * r1 * 0.6);
+      ctx.stroke();
+    }
+  }
   if (player.flashBrand > 0) {
     ctx.fillStyle = 'rgba(255,107,0,' + (player.flashBrand * 0.30).toFixed(3) + ')';
     ctx.fillRect(0, 0, W, H);
@@ -1471,43 +1508,39 @@ function renderHUD() {
   text('BATERIA ' + Math.ceil(player.battery) + '%', pad + u * 27.5, u * 9.5,
        { size: u * 1.9, color: player.battery < 25 ? '#D93025' : MUTED, mono: true, weight: 600 });
 
-  // poziom
-  const lvW = u * 13, lvX = pad + u * 46;
+  // okrazenie
+  const lvW = u * 15, lvX = pad + u * 46;
   ctx.fillStyle = INK;
   ctx.fillRect(lvX, u * 2.4, lvW, u * 7.4);
-  text('LEVEL', lvX + lvW / 2, u * 5, { size: u * 1.4, color: '#9AA3B2', align: 'center', spacing: 2 });
-  text(String(player.level), lvX + lvW / 2, u * 8.6,
+  text('OKRĄŻENIE', lvX + lvW / 2, u * 5, { size: u * 1.4, color: '#9AA3B2', align: 'center', spacing: 2 });
+  text(player.level + '/' + RACE.laps, lvX + lvW / 2, u * 8.6,
        { size: u * 3.6, color: PAPER, align: 'center', mono: true, weight: 700 });
 
-  // zycia
+  // turbo / tryb awaryjny - stan, ktory zmienia jazde, musi byc widac
   const liX = lvX + lvW + u * 2.5;
-  text('ŻYCIA', liX, u * 4.4, { size: u * 1.4, color: MUTED, spacing: 2 });
-  for (let i = 0; i < LIVES; i++) {
-    const cx = liX + i * u * 3.4, cy = u * 6.2, cw2 = u * 2.6, ch2 = u * 3;
-    if (i < player.lives) {
-      ctx.fillStyle = BRAND;
-      ctx.fillRect(cx, cy, cw2, ch2);
-      ctx.fillStyle = PAPER;
-      ctx.fillRect(cx + cw2 * 0.18, cy + ch2 * 0.18, cw2 * 0.64, ch2 * 0.3);
-    } else {
-      ctx.strokeStyle = LINE; ctx.lineWidth = 1;
-      ctx.strokeRect(cx + 0.5, cy + 0.5, cw2 - 1, ch2 - 1);
-    }
+  if (player.turbo > 0) {
+    const tw = u * 20;
+    ctx.fillStyle = BRAND;
+    ctx.fillRect(liX, u * 2.4, tw, u * 7.4);
+    text('TURBO', liX + tw / 2, u * 6.4, { size: u * 2.8, color: PAPER, align: 'center', spacing: 4, weight: 900 });
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(liX + u, u * 7.8, (tw - u * 2) * clamp(player.turbo / TURBO.max, 0, 1), u * 0.9);
+  } else if (player.limp) {
+    text('TRYB AWARYJNY', liX, u * 5.4, { size: u * 1.8, color: '#D93025', spacing: 2, weight: 700 });
+    text('ŁAP ŁADOWARKĘ', liX, u * 8.2, { size: u * 1.4, color: MUTED, spacing: 2 });
+  } else if (player.bestLap) {
+    text('NAJLEPSZE OKR.', liX, u * 4.4, { size: u * 1.4, color: MUTED, spacing: 2 });
+    text(fmtTime(player.bestLap * 1000), liX, u * 8.6, { size: u * 2.8, color: INK, mono: true, weight: 700 });
   }
 
   // wynik
-  text('WYNIK', W - pad, u * 3.6, { size: u * 1.6, color: MUTED, align: 'right', spacing: 2.5 });
-  text(String(Math.floor(player.score)).padStart(6, '0'), W - pad, u * 9.6,
+  text('CZAS', W - pad, u * 3.6, { size: u * 1.6, color: MUTED, align: 'right', spacing: 2.5 });
+  text(fmtTime(player.raceT * 1000), W - pad, u * 9.6,
        { size: u * 5.2, color: INK, align: 'right', mono: true, weight: 700 });
 
   // mnoznik
   if (player.streak > 1) {
-    const m = multiplier();
-    const bw = u * 16, bx = W / 2 - bw / 2;
-    ctx.fillStyle = BRAND;
-    ctx.fillRect(bx, u * 2.2, bw, u * 7.6);
-    text('x' + m, W / 2, u * 7.6, { size: u * 4.6, color: PAPER, align: 'center', weight: 700 });
-    text('SERIA ' + player.streak, W / 2, barH + u * 3, { size: u * 1.6, color: season.ink, align: 'center', spacing: 2 });
+    text('SERIA ŁADOWAREK ' + player.streak, W / 2, barH + u * 3, { size: u * 1.6, color: season.ink, align: 'center', spacing: 2 });
   }
 
   // Predkosc i dystans na bialych plytkach - jezdnia jest ciemna,
@@ -1577,12 +1610,12 @@ function renderHUD() {
         const ph = u * 18, pw = ph * (imgOmoda.img.naturalWidth / imgOmoda.img.naturalHeight);
         ctx.drawImage(imgOmoda.img, W / 2 - pw / 2, by + u * 10, pw, ph);
       }
-      text('NOWA FURA · LEVEL ' + OMODA_LEVEL, W / 2, by + bh - u * 3.4,
+      text('NOWA FURA · OSTATNIE OKRĄŻENIE', W / 2, by + bh - u * 3.4,
            { size: u * 2.2, color: BRAND, align: 'center', spacing: 4 });
     } else {
-      text('LEVEL ' + player.level, W / 2, by + u * 8,
+      text('OKRĄŻENIE ' + player.level + '/' + RACE.laps, W / 2, by + u * 8,
            { size: u * 8, color: PAPER, align: 'center', spacing: 6, weight: 900 });
-      text(season.name + ' · SZYBCIEJ · +' + (LEVEL.bonus * (player.level - 1)) + ' PKT',
+      text(season.name + ' · POPRZEDNIE OKR. ' + fmtTime(player.lastLap * 1000),
            W / 2, by + u * 12.6, { size: u * 2, color: BRAND, align: 'center', spacing: 3 });
     }
     ctx.globalAlpha = 1;
@@ -1663,7 +1696,7 @@ function panelFrame(x, top, w, u, rows) {
 function renderLeaderboard(cx, top, u) {
   const rows = boardRows();
   const w = u * 46, x = cx - w / 2, rowH = ROW_H(u);
-  text('NAJLEPSI KIEROWCY', cx, top, { size: u * 1.6, color: MUTED, align: 'center', spacing: 3 });
+  text('NAJLEPSZE CZASY', cx, top, { size: u * 1.6, color: MUTED, align: 'center', spacing: 3 });
 
   for (let i = 0; i < PLACES; i++) {
     const s = rows[i];
@@ -1679,8 +1712,7 @@ function renderLeaderboard(cx, top, u) {
     text(String(i + 1), x + u * 1.6, y, { size: u * 1.9, color: dim, mono: true });
     if (s) {
       text(s.name, x + u * 5.5, y, { size: u * 2.1, color: col, mono: true, spacing: 2, weight: 700 });
-      if (s.level) text('LVL ' + s.level, x + w * 0.52, y, { size: u * 1.5, color: dim, spacing: 1.5 });
-      text(String(s.score).padStart(6, '0'), x + w - u * 1.6, y,
+      text(fmtTime(s.score), x + w - u * 1.6, y,
            { size: u * 2.1, color: col, mono: true, align: 'right', weight: 600 });
     } else {
       text('wolne miejsce', x + u * 5.5, y, { size: u * 1.8, color: dim });
@@ -1858,7 +1890,7 @@ function renderAttract() {
 
   renderPrevEdition(W / 2 - (totalW / 2) * uu, H * 0.655, totalW * uu, uu);
 
-  text('zostaw e-mail po grze, żeby odebrać nagrodę  ·  ' +
+  text('3 okrążenia na czas  ·  ładowarki dają turbo  ·  ' +
        (IS_TOUCH ? 'dotykaj lewej i prawej strony ekranu' : 'pad: drążek skręca, RT gazuje'),
        W / 2, H * 0.80, { size: u * 1.9, color: MUTED, align: 'center' });
 
@@ -1908,7 +1940,7 @@ function renderCountdown() {
 
 // Gracz ma wiedziec, co go zabilo - prad czy blacha.
 function endTitle() {
-  return player.endReason === 'crash' ? 'AUTO ROZBITE' : 'BATERIA NA ZERO';
+  return player.endReason === 'timeout' ? 'KONIEC CZASU' : 'META!';
 }
 
 function renderGameOver() {
@@ -1922,13 +1954,14 @@ function renderGameOver() {
   text(endTitle(), W / 2, H * 0.14 + u * 6.2,
        { size: u * 5.4, color: PAPER, align: 'center', spacing: 4, weight: 700 });
 
-  text('WYNIK', W / 2, H * 0.33, { size: u * 1.8, color: MUTED, align: 'center', spacing: 4 });
-  text(String(Math.floor(player.score)).padStart(6, '0'), W / 2, H * 0.455,
+  text(player.endReason === 'timeout' ? 'LIMIT ' + (RACE.maxSec / 60) + ' MIN · BEZ CZASU NA TABLICY' : 'CZAS',
+       W / 2, H * 0.33, { size: u * 1.8, color: MUTED, align: 'center', spacing: 4 });
+  text(player.endReason === 'timeout' ? '-:--.-' : fmtTime(player.score), W / 2, H * 0.455,
        { size: u * 12, color: BRAND, align: 'center', mono: true, weight: 700 });
 
   const stats = [
-    ['DYSTANS', Math.floor(player.travelled / CFG.distDivisor) + ' m'],
-    ['POZIOM', String(player.level)],
+    ['NAJLEPSZE OKR.', fmtTime(player.bestLap * 1000)],
+    ['OKRĄŻENIA', Math.min(player.level, RACE.laps) + '/' + RACE.laps],
     ['ŁADOWARKI', String(player.pickups)]
   ];
   const cw = u * 22, ch = u * 9;
@@ -1992,40 +2025,39 @@ function renderGameOver() {
 }
 
 // ------------------------------------------------------------------- logika
-function multiplier() { return clamp(1 + Math.floor(player.streak / 3), 1, 5); }
 
 function addPopup(txt, color, big) {
   popups.push({ txt, color, big, x: W / 2 + rnd(-40, 40), y: H * 0.56, life: 1.2 });
 }
 
-function hitSomething(penalty, msg, costLife) {
+// Bez zyc: kara za zderzenie to stracony czas - auto prawie staje, a turbo
+// i seria ladowarek przepadaja.
+function hitSomething(penalty, msg) {
   if (player.hitCooldown > 0) return;
   player.speed = Math.max(player.speed * 0.35, 0);
   player.battery = Math.max(0, player.battery - penalty);
   player.streak = 0;
+  player.turbo = 0;
   player.hitCooldown = 1.1;
   player.shake = 16;
   player.flashRed = 1;
   Sfx.crash();
-
-  if (costLife) {
-    player.lives--;
-    if (player.lives <= 0) {
-      player.lives = 0;
-      addPopup('AUTO ROZBITE', '#D93025', true);
-      endRun('crash');
-      return;
-    }
-    addPopup(msg + ' · ZOSTAŁY ' + player.lives, '#D93025', true);
-    return;
-  }
   if (msg) addPopup(msg, '#D93025', true);
+}
+
+// Przejazd przez linie mety okrazenia.
+function lapDone() {
+  const lap = player.lapT;
+  player.lastLap = lap;
+  player.bestLap = player.bestLap ? Math.min(player.bestLap, lap) : lap;
+  player.lapT = 0;
+  if (player.level >= RACE.laps) { endRun('finish'); return; }
+  levelUp();
 }
 
 function levelUp() {
   player.level++;
   applySeason(player.level);
-  player.score += LEVEL.bonus * (player.level - 1);
   levelBanner = player.level === OMODA_LEVEL ? 4 : 2.4;
 
   // dokladamy ruchu, ale nie przestawiamy aut juz na trasie
@@ -2048,14 +2080,13 @@ function collectPylon(sp) {
   sp.takenAt = performance.now();
   player.streak++;
   player.pickups++;
-  const m = multiplier();
-  const pts = 250 * m;
-  player.score += pts;
   player.battery = Math.min(100, player.battery + 22);
+  player.limp = false;
+  player.turbo = Math.min(TURBO.max, TURBO.base + TURBO.perStreak * (player.streak - 1));
   player.flashBrand = 0.9;
   // Nazwa produktu w popupie - gracz przy okazji zapamietuje, co zbiera.
   const name = sp.sprite === SPR.prime ? 'PRIME' : 'Q11';
-  addPopup(name + ' +' + pts, BRAND, m > 1);
+  addPopup(name + ' · TURBO', BRAND, player.streak > 1);
   Sfx.pickup(player.streak);
 }
 
@@ -2068,9 +2099,26 @@ function updatePlay(dt) {
   player.x += Input.steer * dx;
   player.x -= dx * speedPct * playerSegment.curve * CFG.centrifugal;
 
-  // gaz / hamulec
-  if (Input.accel > 0.05) {
-    player.speed = accelToward(player.speed, speedCap() * Input.accel, accelRate, dt);
+  // zegar wyscigu
+  player.raceT += dt;
+  player.lapT += dt;
+  if (player.raceT >= RACE.maxSec) { endRun('timeout'); return; }
+
+  // limit predkosci: turbo podnosi go ponad normalny, pusta bateria dusi
+  let cap = speedCap();
+  if (player.limp) cap *= LIMP;
+  if (player.turbo > 0) {
+    player.turbo = Math.max(0, player.turbo - dt);
+    cap *= TURBO.mult;
+  }
+
+  // gaz / hamulec; turbo pcha auto samo, nawet bez gazu
+  if (player.turbo > 0 && Input.brake <= 0.05) {
+    player.speed = accelToward(player.speed, cap, accelRate * 2.4, dt);
+  } else if (player.speed > cap) {
+    player.speed = Math.max(cap, player.speed + decelRate * 1.5 * dt);
+  } else if (Input.accel > 0.05) {
+    player.speed = accelToward(player.speed, cap * Input.accel, accelRate, dt);
   } else if (Input.brake > 0.05) {
     player.speed = Math.max(0, player.speed + brakeRate * dt * Input.brake);
   } else {
@@ -2091,7 +2139,7 @@ function updatePlay(dt) {
     for (const car of playerSegment.cars) {
       if (player.speed > car.speed &&
           overlap(player.x, PLAYER_W / CFG.roadWidth, car.offset, car.w / CFG.roadWidth, 0.85)) {
-        hitSomething(8, 'STŁUCZKA', true);
+        hitSomething(8, 'STŁUCZKA');
         player.position = (findSegment(player.position + playerZ).p1.world.z - playerZ + trackLength) % trackLength;
         break;
       }
@@ -2115,20 +2163,25 @@ function updatePlay(dt) {
   const ds = dt * player.speed;
   const before = player.position;
   player.position = (player.position + ds) % trackLength;
-  if (player.position < before) levelUp();
+  if (player.position < before) { lapDone(); if (state !== 'play') return; }
   player.travelled += ds;
-  player.score += ds / CFG.distDivisor;
   skyOffset += (playerSegment.curve * speedPct * dt * 220) + speedPct * dt * 4;
 
   // bateria: jazda kosztuje prad
-  player.battery -= (0.8 + 2.7 * speedPct) * drainScale() * dt;
+  player.battery -= (0.8 + 2.7 * speedPct) * drainScale() * DRAIN * dt;
 
   updateCars(dt, playerSegment, PLAYER_W);
   Sfx.engineUpdate(speedPct, offRoad);
 
+  // Pusta bateria nie konczy gry - auto wlecze sie w trybie awaryjnym, az
+  // gracz zlapie ladowarke. Traci czas, nie przejazd.
   if (player.battery <= 0) {
     player.battery = 0;
-    endRun('battery');
+    if (!player.limp) {
+      player.limp = true;
+      player.turbo = 0;
+      addPopup('TRYB AWARYJNY', '#D93025', true);
+    }
   }
 }
 
@@ -2146,14 +2199,21 @@ function updateAttractDemo(dt) {
 }
 
 function endRun(reason) {
-  player.endReason = reason || 'battery';
-  Sfx.gameover();
+  player.endReason = reason || 'finish';
   Sfx.engineUpdate(0, false);
-  player.best = Math.max(player.best, Math.floor(player.score));
-  pendingRank = rankFor(Math.floor(player.score));
-  state = 'saving';
-  stateT = 0;
   document.body.classList.remove('playing');
+  stateT = 0;
+  // Bez mety nie ma czasu, wiec nie ma czego zapisac na tablicy.
+  if (player.endReason === 'timeout') {
+    Sfx.gameover();
+    pendingRank = -1;
+    state = 'gameover';
+    return;
+  }
+  Sfx.levelUp();
+  player.score = Math.round(player.raceT * 1000);
+  pendingRank = rankFor(player.score);
+  state = 'saving';
   requestRunCode();
 }
 
@@ -2189,7 +2249,7 @@ function cycleLetter(idx, dir) {
 
 function submitInitials() {
   scores.push({ name: initials.join(''), score: Math.floor(player.score) });
-  scores = scores.sort((a, b) => b.score - a.score).slice(0, 10);
+  scores = scores.sort((a, b) => a.score - b.score).slice(0, 10);
   saveScores();
   Sfx.start1();
   state = 'gameover';
@@ -2237,8 +2297,8 @@ function renderQR() {
 
   // lewa kolumna: wynik
   const lx = W * 0.28;
-  text('TWÓJ WYNIK', lx, H * 0.30, { size: u * 1.8, color: MUTED, align: 'center', spacing: 4 });
-  text(String(Math.floor(player.score)).padStart(6, '0'), lx, H * 0.44,
+  text('TWÓJ CZAS', lx, H * 0.30, { size: u * 1.8, color: MUTED, align: 'center', spacing: 4 });
+  text(fmtTime(player.score), lx, H * 0.44,
        { size: u * 13, color: BRAND, align: 'center', mono: true, weight: 700 });
 
   // Pozycja na tablicy to glowny powod, dla ktorego ktos siega po telefon.
@@ -2247,14 +2307,14 @@ function renderQR() {
     const rw = u * 42, rx2 = lx - rw / 2;
     ctx.fillStyle = rank <= 3 ? BRAND : GREY;
     ctx.fillRect(rx2, H * 0.615, rw, u * 6.4);
-    text(rank <= 3 ? 'TO ' + rank + '. MIEJSCE NA TABLICY!' : 'TWÓJ WYNIK TO ' + rank + '. MIEJSCE',
+    text(rank <= 3 ? 'TO ' + rank + '. MIEJSCE NA TABLICY!' : 'TWÓJ CZAS TO ' + rank + '. MIEJSCE',
          lx, H * 0.615 + u * 4.2,
          { size: u * 2.6, color: rank <= 3 ? PAPER : INK, align: 'center', spacing: 2, weight: 700 });
   }
 
   const stats = [
-    ['DYSTANS', Math.floor(player.travelled / CFG.distDivisor) + ' m'],
-    ['POZIOM', String(player.level)],
+    ['NAJLEPSZE OKR.', fmtTime(player.bestLap * 1000)],
+    ['OKRĄŻENIA', Math.min(player.level, RACE.laps) + '/' + RACE.laps],
     ['ŁADOWARKI', String(player.pickups)]
   ];
   const cw = u * 13, ch = u * 9;

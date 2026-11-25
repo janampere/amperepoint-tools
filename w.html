@@ -83,8 +83,8 @@
 
   <div id="formView" hidden>
     <div class="card">
-      <div class="eyebrow">Twój wynik</div>
-      <div class="score" id="score">000000</div>
+      <div class="eyebrow">Twój czas · 3 okrążenia</div>
+      <div class="score" id="score">-:--.-</div>
       <div class="stats">
         <div class="stat"><span class="eyebrow">Dystans</span><b id="dist">– m</b></div>
         <div class="stat"><span class="eyebrow">Ładowarki</span><b id="picks">–</b></div>
@@ -126,7 +126,7 @@
     <div class="done-mark">✓</div>
     <h1 style="font-size:24px;margin:10px 0 8px">Jesteś na tablicy</h1>
     <p style="font-size:15px;line-height:1.6;color:#333">
-      Spójrz na duży ekran przy stoisku — <b id="doneNick"></b> z wynikiem
+      Spójrz na duży ekran przy stoisku — <b id="doneNick"></b> z czasem
       <b id="doneScore"></b> powinien już tam być.
     </p>
     <div class="msg ok" id="doneMail" hidden>Mail zapisany. Odezwiemy się po targach.</div>
@@ -146,6 +146,11 @@
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+// 151234 ms -> "2:31.2"
+function fmtTime(ms) {
+  const t = Math.floor(Number(ms) / 100);
+  return Math.floor(t / 600) + ':' + String(Math.floor((t % 600) / 10)).padStart(2, '0') + '.' + (t % 10);
+}
 
 // Obrazek potrafi paść, zanim ten skrypt sie wykona - samo nasluchiwanie
 // na 'error' to za malo, trzeba jeszcze sprawdzic stan po fakcie.
@@ -184,10 +189,10 @@ async function load() {
   const run = await r.json();
   if (run.claimed) {
     $('doneNick').textContent = run.nick || '–';
-    $('doneScore').textContent = String(run.score);
+    $('doneScore').textContent = fmtTime(run.score);
     return show('doneView');
   }
-  $('score').textContent = String(run.score).padStart(6, '0');
+  $('score').textContent = fmtTime(run.score);
   $('dist').textContent = run.distance + ' m';
   $('picks').textContent = String(run.pickups);
   if (run.initials) $('nick').value = run.initials;
@@ -220,13 +225,13 @@ $('form').addEventListener('submit', async (e) => {
     const data = await r.json().catch(() => ({}));
     if (r.ok) {
       $('doneNick').textContent = data.nick || nick;
-      $('doneScore').textContent = String(data.score);
+      $('doneScore').textContent = fmtTime(data.score);
       $('doneMail').hidden = !email;
       return show('doneView');
     }
     if (r.status === 409) {
       $('doneNick').textContent = data.nick || nick;
-      $('doneScore').textContent = $('score').textContent.replace(/^0+/, '');
+      $('doneScore').textContent = $('score').textContent;
       return show('doneView');
     }
     const map = {
