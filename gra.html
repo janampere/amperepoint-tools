@@ -165,33 +165,42 @@ const COLORS = {
   charge: { road: '#26292F', grass: '#E9ECF1', rumble: BRAND, lane: '#FFB27A' }
 };
 
-// Pora roku zmienia sie z kazdym okrazeniem. Jezdnia, krawedz i cala
-// typografia zostaja bez zmian - rusza sie tylko krajobraz, zeby gra dalej
-// wygladala na materiał Ampere Point, a nie na kalendarz.
+// Edycja e-Mobility w klimacie GTA VI: kazde okrazenie to inna pora dnia na
+// nadmorskiej autostradzie - poludnie, zachod slonca, neonowa noc, swit.
+// Jezdnia, krawedz i HUD zostaja nasze, rusza sie krajobraz. Bierzemy klimat
+// (kolory, palmy, ocean), nie szate graficzna Rockstara.
 const SEASONS = [
-  { name: 'WIOSNA', grass: '#E9F1E8', grassAlt: '#E2ECE1',
-    tree: 'rgba(74,140,86,0.34)', trunk: 'rgba(18,18,18,0.16)',
-    skyTop: '#DCE7F2', skyMid: '#EDF3F8', hill: 'rgba(74,140,86,0.16)' },
-  { name: 'LATO', grass: '#EDF2E6', grassAlt: '#E6EDDE',
-    tree: 'rgba(52,120,64,0.38)', trunk: 'rgba(18,18,18,0.18)',
-    skyTop: '#D5E6F5', skyMid: '#EBF3FA', hill: 'rgba(52,120,64,0.14)' },
-  { name: 'JESIEŃ', grass: '#F2EDE3', grassAlt: '#EDE6D9',
-    tree: 'rgba(186,116,45,0.36)', trunk: 'rgba(18,18,18,0.18)',
-    skyTop: '#E4DCEA', skyMid: '#F3EFF3', hill: 'rgba(186,116,45,0.16)' },
-  { name: 'ZIMA', grass: '#F4F7FA', grassAlt: '#EDF1F6',
-    tree: 'rgba(51,79,180,0.24)', trunk: 'rgba(18,18,18,0.14)',
-    skyTop: '#DCE3F2', skyMid: '#EDF1F8', hill: 'rgba(51,79,180,0.18)' }
+  { name: 'POŁUDNIE', grass: '#F2E3C4', grassAlt: '#ECDBB8',
+    palm: '#2F8F6B', trunk: '#9C7A55', sky: ['#2FA8D5', '#9EE0EC', '#FFF4DC'],
+    sun: { y: 0.22, r: 0.045, c1: '#FFFBE6', c2: '#FFE08A', stripes: false },
+    sea: '#22A9C4', city: 'rgba(40,70,110,0.20)', fog: '#FFF4DC', ink: INK, night: false },
+  { name: 'ZACHÓD SŁOŃCA', grass: '#E9B49A', grassAlt: '#E2A98E',
+    palm: '#3A1A4F', trunk: '#3A1A4F', sky: ['#4B2A7B', '#FF5FA2', '#FFB25B'],
+    sun: { y: 0.44, r: 0.12, c1: '#FFE66B', c2: '#FF4F8B', stripes: true },
+    sea: '#7A3D8F', city: 'rgba(58,26,79,0.80)', fog: '#FFB89A', ink: INK, night: false },
+  { name: 'NEONOWA NOC', grass: '#1B1233', grassAlt: '#160E2B',
+    palm: '#0B0618', trunk: '#0B0618', sky: ['#07051A', '#24104A', '#6A1E73'],
+    sun: null, sea: '#120A2E', city: 'rgba(10,6,28,0.96)', fog: '#2A1240', ink: PAPER, night: true },
+  { name: 'ŚWIT', grass: '#F0DCCB', grassAlt: '#EAD2BF',
+    palm: '#6C5A8E', trunk: '#6C5A8E', sky: ['#8FBCE6', '#F7C6DA', '#FFE2B8'],
+    sun: { y: 0.45, r: 0.055, c1: '#FFF3D1', c2: '#FFC9A8', stripes: false },
+    sea: '#8FB7D9', city: 'rgba(108,90,142,0.35)', fog: '#FFE9D2', ink: INK, night: false }
 ];
 let season = SEASONS[0];
+// Ekran tytulowy zawsze o zachodzie - to najbardziej rozpoznawalny kadr.
+const ATTRACT_TIME = SEASONS[1];
 
 // Segmenty trzymaja referencje do obiektow z COLORS, wiec wystarczy
 // podmienic w nich kolor trawy - cala trasa zmienia sie w jednej klatce.
+function setTime(t) {
+  season = t;
+  COLORS.light.grass = t.grass;
+  COLORS.start.grass = t.grass;
+  COLORS.dark.grass = t.grassAlt;
+  COLORS.charge.grass = t.grassAlt;
+}
 function applySeason(level) {
-  season = SEASONS[(level - 1) % SEASONS.length];
-  COLORS.light.grass = season.grass;
-  COLORS.start.grass = season.grass;
-  COLORS.dark.grass = season.grassAlt;
-  COLORS.charge.grass = season.grassAlt;
+  setTime(SEASONS[(level - 1) % SEASONS.length]);
 }
 
 // -------------------------------------------------------------------- audio
@@ -569,20 +578,39 @@ function drawCone(ctx, x, y, w, h) {
   ctx.fillRect(x + w * 0.06, y + h * 0.9, w * 0.88, h * 0.1);
 }
 
+// Palma: lekko wygiety pien i wachlarz lisci. Plaska sylwetka w kolorze
+// pory dnia - tlo, nie bohater kadru.
+const PALM_LEAVES = [   // kierunek (rad, 0 = w prawo) i dlugosc wzgledem szerokosci
+  [Math.PI * 0.92, 0.50], [-Math.PI * 0.85, 0.46], [-Math.PI * 0.62, 0.36],
+  [-Math.PI * 0.36, 0.38], [-Math.PI * 0.12, 0.46], [Math.PI * 0.10, 0.50]
+];
 function drawTree(ctx, x, y, w, h) {
-  // Plaska sylwetka w akcencie z motywu - tlo, nie bohater kadru.
-  ctx.fillStyle = season.trunk;
-  ctx.fillRect(x + w * 0.45, y + h * 0.70, w * 0.10, h * 0.30);
-  ctx.fillStyle = season.tree;
-  for (let i = 0; i < 3; i++) {
-    const top = y + h * (0.02 + i * 0.22);
-    const half = w * (0.22 + i * 0.13);
+  const tx = x + w * 0.56, ty = y + h * 0.24;
+  ctx.strokeStyle = season.trunk;
+  ctx.lineWidth = Math.max(1, w * 0.065);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.48, y + h);
+  ctx.quadraticCurveTo(x + w * 0.40, y + h * 0.55, tx, ty);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  ctx.fillStyle = season.palm;
+  for (const [a, len] of PALM_LEAVES) {
+    const L = w * len;
+    const ex = tx + Math.cos(a) * L;
+    const ey = ty + Math.sin(a) * L + L * 0.35;   // koncowka opada
+    const mx = (tx + ex) / 2, my = (ty + ey) / 2;
+    const bulge = L * 0.22;   // lisc wygiety lukiem do gory
     ctx.beginPath();
-    ctx.moveTo(x + w * 0.5, top);
-    ctx.lineTo(x + w * 0.5 + half, top + h * 0.30);
-    ctx.lineTo(x + w * 0.5 - half, top + h * 0.30);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(tx, ty);
+    ctx.quadraticCurveTo(mx, my - bulge, ex, ey);
+    ctx.quadraticCurveTo(mx, my + bulge * 0.2, tx, ty);
+    ctx.fill();
   }
+  ctx.beginPath();
+  ctx.arc(tx, ty, w * 0.05, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawLamp(ctx, x, y, w, h, flip) {
@@ -593,6 +621,14 @@ function drawLamp(ctx, x, y, w, h, flip) {
   ctx.fillRect(x + w * 0.44, y + h * 0.04, w * 0.40, h * 0.045);
   ctx.fillStyle = '#C9CED8';
   ctx.fillRect(x + w * 0.74, y + h * 0.085, w * 0.18, h * 0.035);
+  if (season.night) {
+    ctx.fillStyle = 'rgba(255,190,120,0.28)';
+    ctx.beginPath();
+    ctx.arc(x + w * 0.83, y + h * 0.11, w * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFE2B0';
+    ctx.fillRect(x + w * 0.74, y + h * 0.085, w * 0.18, h * 0.035);
+  }
   ctx.restore();
 }
 
@@ -766,7 +802,7 @@ function addScenery() {
       s.sprites.push({ sprite: SPR.lampL, offset: -1.3 });
       s.sprites.push({ sprite: SPR.lampR, offset: 1.3 });
     }
-    if (i % 13 === 0 && Math.random() < 0.6) {
+    if (i % 9 === 0 && Math.random() < 0.7) {
       const side = Math.random() < 0.5 ? -1 : 1;
       s.sprites.push({ sprite: pick([SPR.tree, SPR.treeS]), offset: side * rnd(1.9, 4.6) });
     }
@@ -1141,68 +1177,126 @@ function renderSprite(sprite, scale, destX, destY, offsetX, offsetY, clipY, extr
 }
 
 function renderSky() {
-  const horizon = H * 0.5;
-  const g = ctx.createLinearGradient(0, 0, 0, horizon + H * 0.1);
-  g.addColorStop(0, season.skyTop);
-  g.addColorStop(0.55, season.skyMid);
-  g.addColorStop(1, PAPER);
+  const horizon = H * 0.5, t = season;
+  const g = ctx.createLinearGradient(0, 0, 0, horizon);
+  g.addColorStop(0, t.sky[0]);
+  g.addColorStop(0.6, t.sky[1]);
+  g.addColorStop(1, t.sky[2]);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, horizon + H * 0.14);
 
-  // dalekie wzgorza - plaskie sylwetki w akcencie z motywu
-  const hills = [
-    { c: season.hill, amp: 0.085, par: 0.45, step: 11, seed: 1.7 },
-    { c: season.hill, amp: 0.055, par: 0.8, step: 8, seed: 3.1 }
-  ];
-  hills.forEach((h) => {
-    ctx.fillStyle = h.c;
-    ctx.beginPath();
-    ctx.moveTo(-W, horizon + 2);
-    const step = W / h.step;
-    for (let i = -2; i <= h.step + 4; i++) {
-      const px = i * step - (skyOffset * h.par) % (step * 2);
-      const ph = H * (h.amp * 0.4 + h.amp * Math.abs(Math.sin(i * h.seed)));
-      ctx.lineTo(px, horizon + 2 - ph);
-      ctx.lineTo(px + step / 2, horizon + 2);
+  if (t.night) renderStars(horizon);
+  const seaH = H * 0.03, seaTop = horizon - seaH;
+  if (t.sun) drawSun(W * 0.5, H * t.sun.y, H * t.sun.r, t.sun, seaTop);
+
+  // ocean pasem na horyzoncie, z odblaskiem slonca
+  ctx.fillStyle = t.sea;
+  ctx.fillRect(0, seaTop, W, seaH + 2);
+  if (t.sun && t.sun.y > 0.3) {
+    ctx.fillStyle = t.sun.c1;
+    for (let i = 0; i < 4; i++) {
+      const lw = H * t.sun.r * (1.4 - i * 0.3);
+      ctx.globalAlpha = 0.55 - i * 0.1;
+      ctx.fillRect(W * 0.5 - lw / 2, seaTop + seaH * (0.15 + i * 0.22), lw, Math.max(1, seaH * 0.1));
     }
-    ctx.lineTo(W * 2, horizon + 2);
-    ctx.closePath(); ctx.fill();
-  });
-
-  // zabudowa na horyzoncie - proste bloki, bez detalu
-  ctx.fillStyle = 'rgba(18,18,18,0.16)';
-  for (let i = -2; i <= 28; i++) {
-    const bw = W / 26;
-    const bx = i * bw - (skyOffset * 1.1) % (bw * 4);
-    const bh = H * (0.015 + 0.04 * Math.abs(Math.sin(i * 2.3 + 1)));
-    ctx.fillRect(bx, horizon + 2 - bh, bw * 0.7, bh);
+    ctx.globalAlpha = 1;
   }
 
-  // linia horyzontu
-  ctx.fillStyle = 'rgba(18,18,18,0.18)';
-  ctx.fillRect(0, horizon, W, 1);
+  renderSkyline(seaTop + seaH * 0.5, t);
+
+  // linia horyzontu - w nocy neonowa
+  ctx.fillStyle = t.night ? 'rgba(255,95,162,0.7)' : 'rgba(18,18,18,0.18)';
+  ctx.fillRect(0, horizon, W, t.night ? 2 : 1);
 }
 
-// Zima bez sniegu to tylko jasniejsza trawa. Platki lecą po torze zaleznym
-// od indeksu, wiec nie trzeba trzymac stanu miedzy klatkami.
-function renderSnow() {
-  if (season.name !== 'ZIMA') return;
+// Slonce jak z plakatu synthwave: gradient od zoltego do rozu, dolna polowa
+// pocieta poziomymi szczelinami. Chowa sie za oceanem (clip do seaTop).
+function drawSun(cx, cy, r, sun, seaTop) {
+  ctx.save();
+  ctx.beginPath();
+  if (sun.stripes) {
+    ctx.rect(cx - r, cy - r, r * 2, r);
+    for (let i = 0; i < 6; i++) {
+      const y0 = cy + r * (i * 0.17);
+      ctx.rect(cx - r, y0, r * 2, r * (0.13 - i * 0.012));
+    }
+  } else {
+    ctx.rect(cx - r, cy - r, r * 2, r * 2);
+  }
+  ctx.clip();
+  ctx.beginPath();
+  ctx.rect(0, 0, W, seaTop);
+  ctx.clip();
+  const g = ctx.createLinearGradient(0, cy - r, 0, cy + r);
+  g.addColorStop(0, sun.c1);
+  g.addColorStop(1, sun.c2);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Panorama nadmorskiego miasta: wiezowce w skupiskach, miedzy nimi widac
+// ocean, a na pierwszym planie male palmy. W nocy okna swieca neonem.
+function renderSkyline(base, t) {
+  const bw = W / 30;
+  const off = (skyOffset * 0.9) % (bw * 30);
+  for (let i = -2; i <= 62; i++) {
+    const k = ((i % 30) + 30) % 30;
+    const cluster = Math.sin(k * 0.42 + 0.8);
+    if (cluster < -0.15) continue;
+    const bx = i * bw - off;
+    if (bx > W + bw || bx < -bw * 2) continue;
+    const hh = H * (0.02 + 0.075 * Math.abs(Math.sin(k * 2.3 + 1)) * (0.4 + cluster));
+    const w0 = bw * 0.72;
+    ctx.fillStyle = t.city;
+    ctx.fillRect(bx, base - hh, w0, hh);
+    // schodkowy szczyt jak w art deco
+    if (k % 3 === 0) ctx.fillRect(bx + w0 * 0.25, base - hh - H * 0.012, w0 * 0.5, H * 0.012);
+    if (t.night) {
+      const neon = k % 2 ? '#FF5FA2' : '#3FE0F0';
+      ctx.fillStyle = neon;
+      ctx.fillRect(bx, base - hh, w0, Math.max(1, H * 0.002));
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 3; c++) {
+          const hsh = Math.abs(Math.sin(k * 91.7 + r * 13.1 + c * 7.3) * 4375.85) % 1;
+          if (hsh < 0.55) continue;
+          const wy = base - hh + H * 0.006 + r * H * 0.008;
+          if (wy > base - H * 0.004) continue;
+          ctx.globalAlpha = 0.85;
+          ctx.fillStyle = hsh > 0.8 ? neon : '#FFD9A0';
+          ctx.fillRect(bx + w0 * (0.15 + c * 0.28), wy, w0 * 0.14, H * 0.003);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+  // male palmy na horyzoncie
+  const pw = W / 9;
+  const poff = (skyOffset * 1.3) % (pw * 9);
+  for (let i = -1; i <= 18; i++) {
+    if (Math.sin(i * 1.7) < 0.2) continue;
+    const px = i * pw - poff + pw * 0.3;
+    if (px < -pw || px > W + pw) continue;
+    const ph = H * (0.05 + 0.025 * Math.abs(Math.sin(i * 3.1)));
+    drawTree(ctx, px, base - ph + H * 0.004, ph * 0.7, ph);
+  }
+}
+
+// Gwiazdy w nocy - pozycje z haszowania indeksu, bez stanu miedzy klatkami.
+function renderStars(horizon) {
   const t = performance.now() * 0.001;
-  const drift = skyOffset * 0.35;
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  for (let i = 0; i < 60; i++) {
-    // Rozrzut z haszowania indeksu. Zwykly sin(i * krok) potrafi trafic w
-    // wielokrotnosci pi i ustawic wszystkie platki w jednym pasie.
-    const seed = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1;
-    const speed = 22 + (i % 7) * 9;
-    const x = (seed * W + Math.sin(t * 0.4 + i) * 18 - drift) % W;
-    const y = ((t * speed + seed * 900) % (H * 0.9));
-    const r = 1 + (i % 3) * 0.7;
-    ctx.beginPath();
-    ctx.arc(x < 0 ? x + W : x, y, r, 0, PI * 2);
-    ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  for (let i = 0; i < 70; i++) {
+    const sx = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1;
+    const sy = Math.abs(Math.sin(i * 78.233) * 12345.678) % 1;
+    ctx.globalAlpha = 0.35 + 0.45 * Math.abs(Math.sin(t * 0.8 + i));
+    ctx.fillRect(sx * W, sy * horizon * 0.75, 1.6, 1.6);
   }
+  ctx.globalAlpha = 1;
 }
+
 
 let skyOffset = 0;
 
@@ -1248,7 +1342,7 @@ function render() {
 
     if (seg.fog < 1) {
       ctx.globalAlpha = 1 - seg.fog;
-      ctx.fillStyle = '#EDF1F8';
+      ctx.fillStyle = season.fog;
       ctx.fillRect(0, seg.p2.screen.y, W, seg.p1.screen.y - seg.p2.screen.y);
       ctx.globalAlpha = 1;
     }
@@ -1303,7 +1397,6 @@ function render() {
     ctx.restore();
   }
 
-  renderSnow();
   ctx.restore();
 
   // --- bliski flash na zderzeniu / ladowaniu ---
@@ -1414,7 +1507,7 @@ function renderHUD() {
     ctx.fillStyle = BRAND;
     ctx.fillRect(bx, u * 2.2, bw, u * 7.6);
     text('x' + m, W / 2, u * 7.6, { size: u * 4.6, color: PAPER, align: 'center', weight: 700 });
-    text('SERIA ' + player.streak, W / 2, barH + u * 3, { size: u * 1.6, color: INK, align: 'center', spacing: 2 });
+    text('SERIA ' + player.streak, W / 2, barH + u * 3, { size: u * 1.6, color: season.ink, align: 'center', spacing: 2 });
   }
 
   // Predkosc i dystans na bialych plytkach - jezdnia jest ciemna,
@@ -1648,9 +1741,9 @@ function renderPrizePhotos(x, top, u) {
     const y = top + u * 2 + i * (chh + gap);
     ctx.fillStyle = PAPER;
     ctx.fillRect(x, y, cw, chh);
-    ctx.strokeStyle = i === 0 ? BRAND : LINE;
-    ctx.lineWidth = i === 0 ? 2 : 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, cw - 1, chh - 1);
+    ctx.strokeStyle = i === 0 ? BRAND : INK;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x + 1.5, y + 1.5, cw - 3, chh - 3);
 
     const pad = u * 0.7, side = chh - pad * 2;
     const ref = card.img();
@@ -1702,8 +1795,16 @@ function renderPrevEdition(x, y, w, u) {
 
 function renderAttract() {
   const u = Math.min(W, H) / 100;
-  ctx.fillStyle = 'rgba(255,255,255,0.86)';
+  // Gora ekranu zostaje zachodem slonca, od tabel w dol jasna plansza jak
+  // dotad - wyniki i nagrody musza byc czytelne z kilku metrow.
+  const ov = ctx.createLinearGradient(0, 0, 0, H);
+  ov.addColorStop(0, 'rgba(255,255,255,0)');
+  ov.addColorStop(0.30, 'rgba(255,255,255,0)');
+  ov.addColorStop(0.325, 'rgba(255,255,255,0.88)');
+  ov.addColorStop(1, 'rgba(255,255,255,0.88)');
+  ctx.fillStyle = ov;
   ctx.fillRect(0, 0, W, H);
+  drawSun(W / 2, H * 0.215, H * 0.15, ATTRACT_TIME.sun, H * 0.305);
 
   const t = performance.now();
 
@@ -1717,14 +1818,30 @@ function renderAttract() {
   text('PTAK WARSAW EXPO', W / 2 + u * 1.5, u * 3.3,
        { size: u * 1.6, color: BRAND, align: 'left', spacing: 3 });
 
+  // logo na bialej plytce - na fioletowym niebie ciemny znak by zniknal
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(W / 2 - u * 9.5, H * 0.093 - u * 2.6, u * 19, u * 5.2);
   logo(W / 2, H * 0.093, u * 3.2, 'center');
 
-  text('WYGRAJ GTA VI', W / 2, H * 0.21,
-       { size: u * 9, color: INK, align: 'center', spacing: 2, weight: 900 });
-  ctx.fillStyle = BRAND;
-  ctx.fillRect(W / 2 - u * 22, H * 0.243, u * 44, u * 0.9);
-  text('AMPERE RUSH · GTA VI, ŁADOWARKI B35 I DR. STORM', W / 2, H * 0.285,
-       { size: u * 2.2, color: MUTED, align: 'center', spacing: 4 });
+  // Haslo bialym z grubym czarnym obrysem - czytelne i na sloncu, i na
+  // fiolecie nieba. Ten zabieg kojarzy sie z GTA bez kopiowania ich logo.
+  setFont(u * 9, 900);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '2px';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = u * 1.3;
+  ctx.strokeStyle = INK;
+  ctx.strokeText('WYGRAJ GTA VI', W / 2, H * 0.215);
+  ctx.fillStyle = PAPER;
+  ctx.fillText('WYGRAJ GTA VI', W / 2, H * 0.215);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  ctx.lineJoin = 'miter';
+
+  ctx.fillStyle = INK;
+  ctx.fillRect(W / 2 - u * 30, H * 0.252, u * 60, u * 4);
+  text('AMPERE RUSH · GTA VI, ŁADOWARKI B35 I DR. STORM', W / 2, H * 0.252 + u * 2.75,
+       { size: u * 1.9, color: PAPER, align: 'center', spacing: 3, weight: 700 });
 
   // Trzy kolumny: wyniki, tabela nagrod, zdjecia. Przy waskim oknie caly
   // blok schodzi proporcjonalnie zamiast wychodzic poza kadr.
@@ -2098,6 +2215,7 @@ function frame(now) {
     acc -= STEP;
   }
 
+  if (state === 'attract' && season !== ATTRACT_TIME) setTime(ATTRACT_TIME);
   render();
   if (state === 'play' || state === 'countdown') renderHUD();
   if (state === 'attract') renderAttract();
