@@ -634,69 +634,235 @@ function drawTree(ctx, x, y, w, h) {
   ctx.fill();
 }
 
-// Barierka promenady: biale slupki i dwie poprzeczki. W nocy neonowa.
-function drawRail(ctx, x, y, w, h) {
-  ctx.fillStyle = season.night ? '#FF5FA2' : '#FFFFFF';
-  ctx.fillRect(x, y + h * 0.10, w, h * 0.12);
-  ctx.fillRect(x, y + h * 0.45, w, h * 0.10);
-  ctx.fillStyle = season.night ? '#7A2A6A' : '#C9CED8';
-  for (let i = 0; i < 4; i++) ctx.fillRect(x + w * (0.02 + i * 0.31), y, w * 0.06, h);
+// ---------------------------------------------------------- zycie na promenadzie
+// Malo postaci, ale kazda cos robi: rowerzysta jedzie, barman wstrzasa
+// shakerem, ktos liże loda. Tlum stojacych ludzikow wygladal jak makieta.
+const PERSON_SHIRTS = ['#FF5FA2', '#2EC4B6', '#FFD23F', '#FFFFFF', '#FF8C42', '#7B5CD6', '#3FE0F0'];
+const PERSON_SKIN = ['#F1C7A3', '#E0AC83', '#C68E5E', '#8D5A3B', '#5C3A26'];
+const PERSON_PANTS = ['#2B4C7E', '#E8E1D3', '#121212', '#4A8F6B', '#F4F4F4'];
+function randomLook() {
+  return {
+    shirt: pick(PERSON_SHIRTS), skin: pick(PERSON_SKIN), pants: pick(PERSON_PANTS),
+    hat: Math.random() < 0.3 ? pick(['#FFFFFF', '#FFD23F', '#121212']) : null,
+    shades: Math.random() < 0.5, flowers: Math.random() < 0.3, phase: Math.random() * 6.28
+  };
 }
 
-// Piesi na promenadzie - plaska grafika jak reszta gry, kolory z wakacyjnej
-// palety. Nogi chodzacych ruszaja sie w czasie (t = performance.now()).
-const WALKER_SHIRTS = ['#FF5FA2', '#2EC4B6', '#FFD23F', '#FFFFFF', '#FF8C42', '#7B5CD6', '#3FE0F0'];
-const WALKER_SKIN = ['#F1C7A3', '#E0AC83', '#C68E5E', '#8D5A3B', '#5C3A26'];
-const WALKER_PANTS = ['#2B4C7E', '#E8E1D3', '#121212', '#4A8F6B', '#F4F4F4'];
-function makeWalker() {
-  const look = {
-    shirt: pick(WALKER_SHIRTS), skin: pick(WALKER_SKIN), pants: pick(WALKER_PANTS),
-    hat: Math.random() < 0.35 ? pick(['#FFFFFF', '#FFD23F', '#121212']) : null,
-    shades: Math.random() < 0.5, phone: Math.random() < 0.25,
-    walk: Math.random() < 0.75, phase: Math.random() * 6.28, dir: Math.random() < 0.5 ? -1 : 1,
-    pattern: Math.random() < 0.3   // koszula w kwiaty
-  };
-  return { w: 300, h: 760, draw: (c, x, y, w, h, t) => drawWalker(c, x, y, w, h, t, look) };
-}
-function drawWalker(ctx, x, y, w, h, t, k) {
-  const cx = x + w / 2;
-  const swing = k.walk ? Math.sin((t || 0) * 0.008 + k.phase) : 0;
+// Postac stoi stopami na fy, ph = wzrost w pikselach. Poza mowi, co robi.
+function drawPerson(ctx, cx, fy, ph, k, pose, t) {
+  const w = ph * 0.42;
+  const tt = (t || 0) * 0.001 + k.phase;
+  let bob = 0, legA = 0, armL = 0, armR = 0;   // ramiona: 0 = w dol, 1 = w gore
+  if (pose === 'walk') { legA = Math.sin(tt * 7); }
+  if (pose === 'jog') { legA = Math.sin(tt * 12); bob = Math.abs(Math.sin(tt * 12)) * ph * 0.03; }
+  if (pose === 'dance') { bob = Math.abs(Math.sin(tt * 6)) * ph * 0.05; armL = Math.sin(tt * 6) > 0 ? 1 : 0.3; armR = 1.3 - armL; legA = Math.sin(tt * 6) * 0.5; }
+  if (pose === 'drink') { armR = Math.sin(tt * 1.6) > 0.2 ? 1 : 0; }
+  if (pose === 'lick') { armR = 0.8 + Math.sin(tt * 3) * 0.12; }
+  if (pose === 'shake') { armL = armR = 0.75 + Math.sin(tt * 18) * 0.25; }
+  if (pose === 'wave') { armR = 0.85 + Math.sin(tt * 8) * 0.15; }
+  if (pose === 'jump') { bob = Math.max(0, Math.sin(tt * 5)) * ph * 0.12; armL = armR = bob > ph * 0.06 ? 1 : 0.2; }
+  const y = fy - ph - bob;
   // nogi
   ctx.fillStyle = k.skin;
-  ctx.fillRect(cx - w * 0.16 + swing * w * 0.10, y + h * 0.62, w * 0.12, h * 0.36);
-  ctx.fillRect(cx + w * 0.04 - swing * w * 0.10, y + h * 0.62, w * 0.12, h * 0.36);
-  // szorty
+  ctx.fillRect(cx - w * 0.16 + legA * w * 0.10, y + ph * 0.62, w * 0.12, ph * 0.38);
+  ctx.fillRect(cx + w * 0.04 - legA * w * 0.10, y + ph * 0.62, w * 0.12, ph * 0.38);
   ctx.fillStyle = k.pants;
-  ctx.fillRect(cx - w * 0.20, y + h * 0.52, w * 0.40, h * 0.16);
+  ctx.fillRect(cx - w * 0.20, y + ph * 0.52, w * 0.40, ph * 0.16);
   // tulow
   ctx.fillStyle = k.shirt;
-  ctx.fillRect(cx - w * 0.24, y + h * 0.22, w * 0.48, h * 0.32);
-  if (k.pattern) {
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    for (let i = 0; i < 5; i++) ctx.fillRect(cx - w * 0.18 + (i % 3) * w * 0.14, y + h * (0.26 + Math.floor(i / 3) * 0.12), w * 0.06, h * 0.03);
+  ctx.fillRect(cx - w * 0.24, y + ph * 0.22, w * 0.48, ph * 0.32);
+  if (k.flowers) {
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let i = 0; i < 5; i++) ctx.fillRect(cx - w * 0.18 + (i % 3) * w * 0.14, y + ph * (0.26 + Math.floor(i / 3) * 0.12), w * 0.06, ph * 0.03);
   }
-  // rece
-  ctx.fillStyle = k.skin;
-  ctx.fillRect(cx - w * 0.34, y + h * 0.24 - swing * h * 0.02, w * 0.10, h * 0.26);
-  if (k.phone) {
-    ctx.fillRect(cx + w * 0.24, y + h * 0.10, w * 0.10, h * 0.20);
-    ctx.fillStyle = '#121212';
-    ctx.fillRect(cx + w * 0.22, y + h * 0.07, w * 0.10, h * 0.07);
-  } else {
-    ctx.fillRect(cx + w * 0.24, y + h * 0.24 + swing * h * 0.02, w * 0.10, h * 0.26);
+  // rece: dlugosc stala, kierunek wg pozy
+  const arm = (side, up) => {
+    const ax = side < 0 ? cx - w * 0.34 : cx + w * 0.24;
+    const len = ph * 0.26;
+    ctx.fillStyle = k.skin;
+    if (up > 0.5) ctx.fillRect(ax, y + ph * 0.24 - len * up, w * 0.10, len * up + ph * 0.02);
+    else ctx.fillRect(ax, y + ph * 0.24, w * 0.10, len * (1 - up * 0.6));
+    return { x: ax + w * 0.05, y: up > 0.5 ? y + ph * 0.24 - len * up : y + ph * 0.24 + len };
+  };
+  arm(-1, armL);
+  const hand = arm(1, armR);
+  if (pose === 'drink' || pose === 'shake') {      // szklanka / shaker w dloni
+    ctx.fillStyle = pose === 'shake' ? '#C9CED8' : '#FF8C42';
+    ctx.fillRect(hand.x - w * 0.07, hand.y - ph * 0.07, w * 0.14, ph * 0.08);
+  }
+  if (pose === 'lick') {                             // lod w wafelku
+    ctx.fillStyle = '#E0A458';
+    ctx.fillRect(hand.x - w * 0.05, hand.y - ph * 0.05, w * 0.10, ph * 0.08);
+    ctx.fillStyle = pick2(k, ['#FF9EC7', '#FFF4C2', '#A6E3D0']);
+    ctx.fillRect(hand.x - w * 0.08, hand.y - ph * 0.10, w * 0.16, ph * 0.06);
   }
   // glowa
   ctx.fillStyle = k.skin;
-  ctx.fillRect(cx - w * 0.14, y + h * 0.04, w * 0.28, h * 0.17);
-  if (k.shades) {
-    ctx.fillStyle = '#121212';
-    ctx.fillRect(cx - w * 0.14, y + h * 0.10, w * 0.28, h * 0.035);
-  }
+  ctx.fillRect(cx - w * 0.14, y + ph * 0.04, w * 0.28, ph * 0.17);
+  if (k.shades) { ctx.fillStyle = '#121212'; ctx.fillRect(cx - w * 0.14, y + ph * 0.10, w * 0.28, ph * 0.035); }
   if (k.hat) {
     ctx.fillStyle = k.hat;
-    ctx.fillRect(cx - w * 0.22, y + h * 0.03, w * 0.44, h * 0.025);
-    ctx.fillRect(cx - w * 0.14, y, w * 0.28, h * 0.04);
+    ctx.fillRect(cx - w * 0.22, y + ph * 0.03, w * 0.44, ph * 0.025);
+    ctx.fillRect(cx - w * 0.14, y, w * 0.28, ph * 0.04);
   }
+}
+// staly wybor z listy dla danej postaci (bez losowania co klatke)
+function pick2(k, list) { return list[Math.floor(k.phase * 100) % list.length]; }
+
+// Rowerzysta widziany z tylu: kolo, rama, pedalujace nogi.
+function drawCyclist(ctx, x, y, w, h, t, k) {
+  const cx = x + w / 2, tt = (t || 0) * 0.001 + k.phase;
+  ctx.fillStyle = '#121212';
+  ctx.fillRect(cx - w * 0.05, y + h * 0.70, w * 0.10, h * 0.30);        // kolo
+  ctx.fillStyle = k.bike;
+  ctx.fillRect(cx - w * 0.04, y + h * 0.55, w * 0.08, h * 0.18);        // rama
+  ctx.fillRect(cx - w * 0.30, y + h * 0.30, w * 0.60, h * 0.04);        // kierownica
+  const p = Math.sin(tt * 9);
+  ctx.fillStyle = k.skin;                                               // nogi na pedalach
+  ctx.fillRect(cx - w * 0.20, y + h * (0.52 + p * 0.06), w * 0.11, h * 0.22);
+  ctx.fillRect(cx + w * 0.09, y + h * (0.52 - p * 0.06), w * 0.11, h * 0.22);
+  ctx.fillStyle = k.pants;
+  ctx.fillRect(cx - w * 0.20, y + h * 0.44, w * 0.40, h * 0.12);
+  ctx.fillStyle = k.shirt;
+  ctx.fillRect(cx - w * 0.22, y + h * 0.16, w * 0.44, h * 0.30);
+  ctx.fillStyle = k.skin;
+  ctx.fillRect(cx - w * 0.30, y + h * 0.20, w * 0.09, h * 0.14);
+  ctx.fillRect(cx + w * 0.21, y + h * 0.20, w * 0.09, h * 0.14);
+  ctx.fillRect(cx - w * 0.13, y + h * 0.02, w * 0.26, h * 0.15);
+  ctx.fillStyle = k.helmet;
+  ctx.fillRect(cx - w * 0.15, y, w * 0.30, h * 0.06);
+}
+
+// Rolkarz na desce: lekko sie kolysze.
+function drawSkater(ctx, x, y, w, h, t, k) {
+  const cx = x + w / 2, tt = (t || 0) * 0.001 + k.phase;
+  const sway = Math.sin(tt * 3) * w * 0.06;
+  ctx.fillStyle = '#121212';
+  ctx.fillRect(cx - w * 0.30, y + h * 0.95, w * 0.60, h * 0.05);
+  drawPerson(ctx, cx + sway, y + h * 0.95, h * 0.95, k, 'stand', t);
+}
+
+// Bar na plazy: daszek w paski, neon, lada; barman i dwoch gosci.
+function drawBeachBar(ctx, x, y, w, h, t, sc) {
+  const bw = w * 0.62, fy = y + h;
+  // budka
+  ctx.fillStyle = '#2EC4B6';
+  ctx.fillRect(x, y + h * 0.30, bw, h * 0.70);
+  // daszek w paski
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = i % 2 ? '#FFFFFF' : '#FF5FA2';
+    ctx.fillRect(x - w * 0.02 + i * (bw + w * 0.04) / 6, y + h * 0.18, (bw + w * 0.04) / 6 + 1, h * 0.12);
+  }
+  // neon BAR
+  const glow = season.night ? 0.6 + 0.4 * Math.abs(Math.sin((t || 0) * 0.004)) : 1;
+  ctx.fillStyle = season.night ? 'rgba(255,95,162,' + (0.35 * glow).toFixed(2) + ')' : 'rgba(0,0,0,0)';
+  ctx.fillRect(x + bw * 0.18, y - h * 0.02, bw * 0.64, h * 0.20);
+  ctx.fillStyle = INK;
+  ctx.fillRect(x + bw * 0.22, y + h * 0.01, bw * 0.56, h * 0.14);
+  if (w > 40) {
+    ctx.fillStyle = season.night ? '#FF9ED0' : '#FFD23F';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 ' + Math.max(6, Math.floor(h * 0.11)) + 'px Geist, Arial, sans-serif';
+    ctx.fillText('BAR', x + bw / 2, y + h * 0.085);
+  }
+  // barman za lada
+  drawPerson(ctx, x + bw * 0.5, fy - h * 0.18, h * 0.62, sc.barman, 'shake', t);
+  // lada
+  ctx.fillStyle = '#C98A4B';
+  ctx.fillRect(x - w * 0.01, y + h * 0.62, bw + w * 0.02, h * 0.38);
+  ctx.fillStyle = '#E0A458';
+  ctx.fillRect(x - w * 0.02, y + h * 0.60, bw + w * 0.04, h * 0.05);
+  // goscie
+  drawPerson(ctx, x + bw + w * 0.09, fy, h * 0.74, sc.a, 'drink', t);
+  drawPerson(ctx, x + bw + w * 0.27, fy, h * 0.72, sc.b, 'wave', t);
+}
+
+// Budka z lodami: wozek z parasolem, sprzedawca, ktos z lodem i dziecko.
+function drawIceCream(ctx, x, y, w, h, t, sc) {
+  const cw = w * 0.42, fy = y + h;
+  const cx = x + cw / 2;
+  // parasol
+  ctx.fillStyle = '#121212';
+  ctx.fillRect(cx - w * 0.008, y + h * 0.10, w * 0.016, h * 0.50);
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i % 2 ? '#FFFFFF' : '#FF8C42';
+    const sx = x - w * 0.06 + i * (cw + w * 0.12) / 5;
+    ctx.beginPath();
+    ctx.moveTo(cx, y);
+    ctx.lineTo(sx, y + h * 0.16);
+    ctx.lineTo(sx + (cw + w * 0.12) / 5, y + h * 0.16);
+    ctx.closePath(); ctx.fill();
+  }
+  // sprzedawca
+  drawPerson(ctx, cx, fy - h * 0.22, h * 0.55, sc.seller, 'wave', t);
+  // wozek
+  ctx.fillStyle = '#FFF4E6';
+  ctx.fillRect(x, y + h * 0.56, cw, h * 0.36);
+  ctx.fillStyle = '#FF9EC7';
+  ctx.fillRect(x, y + h * 0.56, cw, h * 0.07);
+  if (w > 40) {
+    ctx.fillStyle = '#FF5FA2';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 ' + Math.max(6, Math.floor(h * 0.10)) + 'px Geist, Arial, sans-serif';
+    ctx.fillText('LODY', cx, y + h * 0.76);
+  }
+  ctx.fillStyle = '#121212';
+  ctx.fillRect(x + cw * 0.12, y + h * 0.90, cw * 0.16, h * 0.10);
+  ctx.fillRect(x + cw * 0.72, y + h * 0.90, cw * 0.16, h * 0.10);
+  // klienci
+  drawPerson(ctx, x + cw + w * 0.14, fy, h * 0.66, sc.a, 'lick', t);
+  drawPerson(ctx, x + cw + w * 0.34, fy, h * 0.42, sc.kid, 'jump', t);
+}
+
+// Tancerz przy glosniku - najprostszy sposob na ruch w kadrze.
+function drawDancers(ctx, x, y, w, h, t, sc) {
+  const fy = y + h;
+  ctx.fillStyle = '#121212';
+  ctx.fillRect(x + w * 0.02, y + h * 0.62, w * 0.24, h * 0.38);
+  const pulse = 1 + 0.12 * Math.abs(Math.sin((t || 0) * 0.012));
+  ctx.fillStyle = '#FF5FA2';
+  ctx.beginPath(); ctx.arc(x + w * 0.14, y + h * 0.74, w * 0.07 * pulse, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3FE0F0';
+  ctx.beginPath(); ctx.arc(x + w * 0.14, y + h * 0.90, w * 0.04 * pulse, 0, Math.PI * 2); ctx.fill();
+  drawPerson(ctx, x + w * 0.48, fy, h * 0.80, sc.a, 'dance', t);
+  drawPerson(ctx, x + w * 0.78, fy, h * 0.76, sc.b, 'dance', (t || 0) + 400);
+}
+
+function makeScene(kind) {
+  const sc = { a: randomLook(), b: randomLook(), barman: randomLook(), seller: randomLook(), kid: randomLook() };
+  if (kind === 'bar') return { w: 1900, h: 1250, draw: (c, x, y, w, h, t) => drawBeachBar(c, x, y, w, h, t, sc) };
+  if (kind === 'ice') return { w: 1500, h: 1050, draw: (c, x, y, w, h, t) => drawIceCream(c, x, y, w, h, t, sc) };
+  return { w: 1100, h: 900, draw: (c, x, y, w, h, t) => drawDancers(c, x, y, w, h, t, sc) };
+}
+
+// Ruchome postacie: jada/biegna chodnikiem wlasnym tempem.
+function makeMover(kind) {
+  const k = randomLook();
+  if (kind === 'bike') {
+    k.bike = pick(['#FF5FA2', '#2EC4B6', '#FFD23F', '#FFFFFF']);
+    k.helmet = pick(['#FFFFFF', '#FF8C42', '#121212']);
+    return { kind, speed: rnd(1100, 1500), sprite: { w: 380, h: 820, draw: (c, x, y, w, h, t) => drawCyclist(c, x, y, w, h, t, k) } };
+  }
+  if (kind === 'skate') return { kind, speed: rnd(700, 950), sprite: { w: 320, h: 800, draw: (c, x, y, w, h, t) => drawSkater(c, x, y, w, h, t, k) } };
+  return { kind, speed: rnd(450, 600), sprite: { w: 300, h: 760, draw: (c, x, y, w, h, t) => drawPerson(c, x + w / 2, y + h, h, k, 'jog', t) } };
+}
+
+// Jedna ciagla porecz wzdluz jezdni, slupek co kilka segmentow. Rysowana w
+// przebiegu sprite'ow (od tylu), zeby dalszy asfalt jej nie zamalowal.
+function drawPromenadeRail(seg) {
+  const a = seg.p1.screen, b = seg.p2.screen;
+  if (!(b.y < a.y)) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, seg.clip); ctx.clip();
+  ctx.fillStyle = season.curb;
+  for (const side of [-1, 1]) {
+    const ax = a.x + side * a.w * 1.1, bx = b.x + side * b.w * 1.1;
+    const ah = a.w * 0.10, bh = b.w * 0.10;
+    const at = Math.max(1, a.w * 0.014), bt = Math.max(1, b.w * 0.014);
+    polygon(ax, a.y - ah, bx, b.y - bh, bx, b.y - bh + bt, ax, a.y - ah + at, season.curb);
+    if (seg.index % 4 === 0) ctx.fillRect(ax - at / 2, a.y - ah, at, ah);
+  }
+  ctx.restore();
 }
 
 function drawLamp(ctx, x, y, w, h, flip) {
@@ -775,7 +941,6 @@ const SPR = {
   lampL:     { w: 900,  h: 2400, draw: (c,x,y,w,h) => drawLamp(c,x,y,w,h,false) },
   lampR:     { w: 900,  h: 2400, draw: (c,x,y,w,h) => drawLamp(c,x,y,w,h,true) },
   billboard: { w: 2600, h: 1700, draw: drawBillboard },
-  rail:      { w: 900,  h: 260,  draw: drawRail },
   gantry:    { w: 5600, h: 2100, draw: drawGantry }
 };
 
@@ -840,6 +1005,7 @@ function addSegment(curve, y) {
     curve: curve,
     sprites: [],
     cars: [],
+    life: [],
     color: isCharge ? COLORS.charge
          : (Math.floor(n / CFG.rumbleLength) % 2 ? COLORS.dark : COLORS.light)
   });
@@ -888,21 +1054,35 @@ function isPromenade(i) {
   return i >= PROMENADE.first && (i - PROMENADE.first) % PROMENADE.every < PROMENADE.len;
 }
 
+let movers = [];
+
 function addScenery() {
   const n = segments.length;
+  // Promenady: co ~22 segmenty scena (bar, lody, tancerze) na zmiane po
+  // obu stronach, a po chodniku jada rowerzysci, rolkarze i biegacze.
+  movers = [];
+  for (let start = PROMENADE.first; start < n - 40; start += PROMENADE.every) {
+    const end = Math.min(start + PROMENADE.len, n - 20);
+    for (let i = start; i < end; i++) segments[i].promenade = true;
+    const kinds = ['bar', 'ice', 'dance'];
+    let side = pick([-1, 1]), k = rndInt(0, 2);
+    for (let i = start + 8; i < end - 6; i += rndInt(20, 28)) {
+      segments[i].sprites.push({ sprite: makeScene(kinds[k++ % 3]), offset: side * 1.62 });
+      side = -side;
+    }
+    for (const kind of ['bike', 'bike', 'skate', 'jog']) {
+      const m = makeMover(kind);
+      m.zone = [start * CFG.segmentLength, end * CFG.segmentLength];
+      m.z = rnd(m.zone[0], m.zone[1]);
+      m.offset = pick([-1, 1]) * rnd(1.3, 1.5);
+      m.seg = findSegment(m.z);
+      m.seg.life.push(m);
+      movers.push(m);
+    }
+  }
   // pobocze: drzewa, lampy, billboardy
   for (let i = 20; i < n - 20; i++) {
     const s = segments[i];
-    if (isPromenade(i)) {
-      s.promenade = true;
-      if (i % 3 === 0) {
-        s.sprites.push({ sprite: SPR.rail, offset: -1.2 });
-        s.sprites.push({ sprite: SPR.rail, offset: 1.2 });
-      }
-      for (const side of [-1, 1]) {
-        if (Math.random() < 0.28) s.sprites.push({ sprite: makeWalker(), offset: side * rnd(1.4, 1.75) });
-      }
-    }
     if (i % 40 === 0 && !s.promenade) {
       s.sprites.push({ sprite: SPR.lampL, offset: -1.3 });
       s.sprites.push({ sprite: SPR.lampR, offset: 1.3 });
@@ -980,6 +1160,21 @@ function resetCars(count) {
 function syncCarSegments() {
   segments.forEach((s) => s.cars.length = 0);
   cars.forEach((c) => findSegment(c.z).cars.push(c));
+}
+
+// Postacie na promenadzie jada w kolko po swoim odcinku.
+function updateMovers(dt) {
+  for (const m of movers) {
+    m.z += m.speed * dt;
+    if (m.z >= m.zone[1]) m.z = m.zone[0];
+    const seg = findSegment(m.z);
+    if (seg !== m.seg) {
+      const i = m.seg.life.indexOf(m);
+      if (i >= 0) m.seg.life.splice(i, 1);
+      seg.life.push(m);
+      m.seg = seg;
+    }
+  }
 }
 
 function updateCars(dt, playerSeg, playerW) {
@@ -1475,6 +1670,16 @@ function render() {
   for (let n = CFG.drawDistance - 1; n > 0; n--) {
     const seg = segments[(baseSegment.index + n) % segments.length];
     if (!seg.p1.screen.scale || seg.p1.camera.z <= cameraDepth) continue;
+
+    if (seg.promenade) drawPromenadeRail(seg);
+    for (const m of seg.life) {
+      const pct = ((m.z % CFG.segmentLength) / CFG.segmentLength);
+      const scale = lerp(seg.p1.screen.scale, seg.p2.screen.scale, pct);
+      const sx = lerp(seg.p1.screen.x, seg.p2.screen.x, pct);
+      const sy = lerp(seg.p1.screen.y, seg.p2.screen.y, pct);
+      const sw = lerp(seg.p1.screen.w, seg.p2.screen.w, pct);
+      renderSprite(m.sprite, scale, sx + sw * m.offset, sy, -0.5, -1, seg.clip, now);
+    }
 
     for (const car of seg.cars) {
       const pct = ((car.z % CFG.segmentLength) / CFG.segmentLength);
@@ -2294,6 +2499,7 @@ function updatePlay(dt) {
   player.battery -= (0.8 + 2.7 * speedPct) * drainScale() * DRAIN * dt;
 
   updateCars(dt, playerSegment, PLAYER_W);
+  updateMovers(dt);
   Sfx.engineUpdate(speedPct, offRoad);
 
   // Pusta bateria nie konczy gry - auto wlecze sie w trybie awaryjnym, az
@@ -2319,6 +2525,7 @@ function updateAttractDemo(dt) {
   player.position = (player.position + ds) % trackLength;
   skyOffset += (seg.curve * speedPct * dt * 220) + speedPct * dt * 4;
   updateCars(dt, seg, PLAYER_W);
+  updateMovers(dt);
 }
 
 function endRun(reason) {
