@@ -84,7 +84,7 @@
   <div id="formView" hidden>
     <div class="card">
       <div class="eyebrow">Twój czas · 3 okrążenia</div>
-      <div class="score" id="score">-:--.-</div>
+      <div class="score" id="score">-:--.--</div>
       <div class="stats">
         <div class="stat"><span class="eyebrow">Dystans</span><b id="dist">– m</b></div>
         <div class="stat"><span class="eyebrow">Ładowarki</span><b id="picks">–</b></div>
@@ -148,8 +148,9 @@
 const $ = (id) => document.getElementById(id);
 // 151234 ms -> "2:31.2"
 function fmtTime(ms) {
-  const t = Math.floor(Number(ms) / 100);
-  return Math.floor(t / 600) + ':' + String(Math.floor((t % 600) / 10)).padStart(2, '0') + '.' + (t % 10);
+  const t = Math.floor(Number(ms) / 10);
+  return Math.floor(t / 6000) + ':' + String(Math.floor((t % 6000) / 100)).padStart(2, '0') + '.' +
+         String(t % 100).padStart(2, '0');
 }
 
 // Obrazek potrafi paść, zanim ten skrypt sie wykona - samo nasluchiwanie

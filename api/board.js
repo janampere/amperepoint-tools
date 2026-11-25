@@ -26,7 +26,12 @@ async function handler(req, res) {
       if (!prev || better(Number(r.score), Number(prev.score))) best.set(key, r);
     }
     const board = [...best.values()]
-      .sort((a, b) => (better(Number(a.score), Number(b.score)) ? -1 : 1))
+      // remis co do milisekundy: wyzej ten, kto wykrecil czas wczesniej
+      .sort((a, b) => {
+        const sa = Number(a.score), sb = Number(b.score);
+        if (sa !== sb) return better(sa, sb) ? -1 : 1;
+        return String(a.playedAt || '').localeCompare(String(b.playedAt || ''));
+      })
       .slice(0, limit)
       .map((r) => ({
         nick: r.nick, score: r.score, level: r.level || 1, playedAt: r.playedAt

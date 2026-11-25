@@ -151,11 +151,12 @@ const LIMP = 0.45;   // tryb awaryjny przy pustej baterii: ulamek predkosci
 // napiecie bralo sie z tego. Tu ma tylko zmuszac do zjazdu po ladowarke.
 const DRAIN = 0.6;
 
-// 151234 ms -> "2:31.2"
+// 151234 ms -> "2:31.23". Setne, bo przy kilkuset przejazdach dziesiate
+// czesci sekundy czesto by sie powtarzaly.
 function fmtTime(ms) {
-  if (!(ms > 0)) return '-:--.-';
-  const t = Math.floor(ms / 100);
-  const m = Math.floor(t / 600), sec = Math.floor((t % 600) / 10), d = t % 10;
+  if (!(ms > 0)) return '-:--.--';
+  const t = Math.floor(ms / 10);
+  const m = Math.floor(t / 6000), sec = Math.floor((t % 6000) / 100), d = String(t % 100).padStart(2, '0');
   return m + ':' + String(sec).padStart(2, '0') + '.' + d;
 }
 
@@ -1087,7 +1088,7 @@ function saveScores() {
 function rankFor(score) {
   const list = scores.slice().sort((a, b) => a.score - b.score);
   for (let i = 0; i < 10; i++) {
-    if (!list[i] || score < list[i].score) return i;
+    if (!list[i] || score < list[i].score) return i;   // remis: starszy wynik zostaje wyzej
   }
   return -1;
 }
@@ -1956,7 +1957,7 @@ function renderGameOver() {
 
   text(player.endReason === 'timeout' ? 'LIMIT ' + (RACE.maxSec / 60) + ' MIN · BEZ CZASU NA TABLICY' : 'CZAS',
        W / 2, H * 0.33, { size: u * 1.8, color: MUTED, align: 'center', spacing: 4 });
-  text(player.endReason === 'timeout' ? '-:--.-' : fmtTime(player.score), W / 2, H * 0.455,
+  text(player.endReason === 'timeout' ? '-:--.--' : fmtTime(player.score), W / 2, H * 0.455,
        { size: u * 12, color: BRAND, align: 'center', mono: true, weight: 700 });
 
   const stats = [
@@ -2046,11 +2047,16 @@ function hitSomething(penalty, msg) {
 }
 
 // Przejazd przez linie mety okrazenia.
-function lapDone() {
+// overshoot = ulamek ostatniego kroku symulacji, ktory wypadl juz za linia.
+// Odejmujemy go, zeby czas nie skakal co 1/60 s - inaczej remisy przy
+// kilkuset graczach bylyby realne.
+function lapDone(overshoot) {
+  player.raceT -= overshoot;
+  player.lapT -= overshoot;
   const lap = player.lapT;
   player.lastLap = lap;
   player.bestLap = player.bestLap ? Math.min(player.bestLap, lap) : lap;
-  player.lapT = 0;
+  player.lapT = overshoot;
   if (player.level >= RACE.laps) { endRun('finish'); return; }
   levelUp();
 }
@@ -2163,7 +2169,10 @@ function updatePlay(dt) {
   const ds = dt * player.speed;
   const before = player.position;
   player.position = (player.position + ds) % trackLength;
-  if (player.position < before) { lapDone(); if (state !== 'play') return; }
+  if (player.position < before) {
+    lapDone(ds > 0 ? dt * (player.position / ds) : 0);
+    if (state !== 'play') return;
+  }
   player.travelled += ds;
   skyOffset += (playerSegment.curve * speedPct * dt * 220) + speedPct * dt * 4;
 
@@ -2211,7 +2220,7 @@ function endRun(reason) {
     return;
   }
   Sfx.levelUp();
-  player.score = Math.round(player.raceT * 1000);
+  player.score = Math.round(player.raceT * 1000);   // ms
   pendingRank = rankFor(player.score);
   state = 'saving';
   requestRunCode();

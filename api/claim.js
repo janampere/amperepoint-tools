@@ -10,8 +10,9 @@ const PIPEDRIVE_TOKEN = process.env.PIPEDRIVE_TOKEN;
 const SHEET_WEBHOOK_URL = process.env.SHEET_WEBHOOK_URL;
 // 151234 ms -> "2:31.2"
 function fmtTime(ms) {
-  const t = Math.floor(Number(ms) / 100);
-  return Math.floor(t / 600) + ':' + String(Math.floor((t % 600) / 10)).padStart(2, '0') + '.' + (t % 10);
+  const t = Math.floor(Number(ms) / 10);
+  return Math.floor(t / 6000) + ':' + String(Math.floor((t % 6000) / 100)).padStart(2, '0') + '.' +
+         String(t % 100).padStart(2, '0');
 }
 
 const EVENT_TAG = process.env.EVENT_TAG || 'e-Mobility 2026 Nadarzyn';
