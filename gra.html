@@ -1024,12 +1024,7 @@ function loadScores() {
     scores = raw ? JSON.parse(raw) : [];
   } catch (e) { scores = []; }
   if (!Array.isArray(scores)) scores = [];
-  if (scores.length === 0) {
-    scores = [
-      { name: 'AMP', score: 9000 }, { name: 'EVX', score: 7400 }, { name: 'KTW', score: 6100 },
-      { name: 'WAT', score: 4800 }, { name: 'KWH', score: 3500 }
-    ];
-  }
+  // Bez wynikow na niby - na stoisku wygladaly jak prawdziwi gracze.
 }
 function saveScores() {
   try { localStorage.setItem(LS_KEY, JSON.stringify(scores.slice(0, 10))); } catch (e) {}
