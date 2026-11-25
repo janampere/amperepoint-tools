@@ -101,8 +101,10 @@ function loadImg(src) {
   ref.img.src = src;
   return ref;
 }
-const imgPrime = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Wallbox_MAIN_23_2c3bb7e1-da33-45ed-bcdb-d729a42035f4.jpg?v=1787313349&width=320');
-const imgQ11 = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/Q11_2ba5f7ed-4505-43b8-b2cc-928fbe90ddc7.png?v=1788339617&width=320');
+// Ladowarki na trasie: zdjecia ze sklepu z wycietym tlem (PNG w repo), zeby
+// wisialy na slupku jak prawdziwe urzadzenie, a nie jak plakat.
+const imgPrime = loadImg('prime-cut.png');
+const imgQ11 = loadImg('q11-cut.png');
 // Zdjecie Omody leci tylko do banera nagrody - to kadr z tlem, wiec jako
 // sprite na jezdni wygladalby jak latajacy prostokat. Na e-Mobility Omoda 5
 // (biala, na sniegu - grudzien), na KNM byla Omoda 9.
@@ -323,6 +325,159 @@ const Sfx = {
   }
 };
 
+// ------------------------------------------------------------------- muzyka
+// Wlasny podklad synthwave generowany na zywo (Web Audio), bez plikow.
+// Klimat radia z lat 80., ale nasza progresja i aranzacja - zadnej cudzej
+// muzyki (utwory z GTA sa licencjonowane, na stoisku byloby to publiczne
+// odtwarzanie). Gra tylko w trakcie wyscigu, zeby obsluga stoiska nie
+// sluchala petli caly dzien. Wycisza ja ten sam przycisk co efekty.
+const Music = {
+  bus: null, delay: null, noiseBuf: null, timer: null,
+  step: 0, nextT: 0, bpm: 100, lap: 1, playing: false,
+  // a-moll: Am - F - C - G, po takcie na akord
+  CHORDS: [
+    { root: 45, pad: [57, 60, 64] },
+    { root: 41, pad: [53, 57, 60] },
+    { root: 48, pad: [52, 55, 60] },
+    { root: 43, pad: [50, 55, 59] }
+  ],
+  hz(m) { return 440 * Math.pow(2, (m - 69) / 12); },
+  setup() {
+    if (this.bus || !Sfx.ctx) return;
+    const c = Sfx.ctx;
+    this.bus = c.createGain();
+    this.bus.gain.value = 0;
+    this.bus.connect(Sfx.master);
+    // echo na arpeggio - bez niego brzmi jak dzwonek
+    this.delay = c.createDelay(1);
+    const fb = c.createGain(); fb.gain.value = 0.32;
+    const wet = c.createGain(); wet.gain.value = 0.4;
+    this.delay.connect(fb); fb.connect(this.delay);
+    this.delay.connect(wet); wet.connect(this.bus);
+    const len = c.sampleRate;
+    this.noiseBuf = c.createBuffer(1, len, c.sampleRate);
+    const d = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  },
+  start() {
+    Sfx.init();
+    if (!Sfx.ctx) return;
+    this.setup();
+    const t = Sfx.ctx.currentTime;
+    this.bus.gain.cancelScheduledValues(t);
+    this.bus.gain.setValueAtTime(this.bus.gain.value, t);
+    this.bus.gain.linearRampToValueAtTime(0.42, t + 0.8);
+    this.step = 0;
+    this.nextT = t + 0.1;
+    this.setLap(1);
+    this.playing = true;
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.tick(), 25);
+  },
+  stop(fade) {
+    if (!this.playing || !Sfx.ctx) return;
+    this.playing = false;
+    const f = fade || 1.5, t = Sfx.ctx.currentTime;
+    this.bus.gain.cancelScheduledValues(t);
+    this.bus.gain.setValueAtTime(this.bus.gain.value, t);
+    this.bus.gain.linearRampToValueAtTime(0, t + f);
+    setTimeout(() => { if (!this.playing) clearInterval(this.timer); }, f * 1000 + 150);
+  },
+  // kazde okrazenie szybciej i gesciej
+  setLap(l) {
+    this.lap = Math.min(3, Math.max(1, l));
+    this.bpm = [100, 106, 112][this.lap - 1];
+    if (this.delay) this.delay.delayTime.value = (60 / this.bpm) * 0.75;
+  },
+  tick() {
+    const c = Sfx.ctx;
+    if (!c) return;
+    while (this.nextT < c.currentTime + 0.15) {
+      this.play(this.step, this.nextT);
+      this.nextT += 60 / this.bpm / 4;
+      this.step++;
+    }
+  },
+  play(step, t) {
+    const s = step % 16, bar = Math.floor(step / 16);
+    const ch = this.CHORDS[bar % 4], lap = this.lap, six = 60 / this.bpm / 4;
+    if (s % 4 === 0) this.kick(t);
+    if (s === 4 || s === 12) this.snare(t);
+    if (s % 2 === 0 || lap >= 2) this.hat(t, s % 4 === 2 ? 0.10 : 0.05);
+    if (s % 2 === 0) this.bass(this.hz(ch.root + (s % 4 === 2 ? 12 : 0)), t, six * 1.8);
+    if (s === 0) this.pad(ch.pad, t, six * 16);
+    if (lap >= 2) {
+      const pat = [0, 1, 2, 1];
+      const up = lap >= 3 && s >= 8 ? 24 : 12;
+      this.lead(this.hz(ch.pad[pat[s % 4]] + up), t, six * 0.9);
+    }
+  },
+  env(g, t, a, peak, d) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + a);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+  },
+  kick(t) {
+    const c = Sfx.ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.13);
+    this.env(g, t, 0.002, 0.9, 0.28);
+    o.connect(g); g.connect(this.bus);
+    o.start(t); o.stop(t + 0.35);
+  },
+  noise(t, type, freq, peak, d) {
+    const c = Sfx.ctx, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = this.noiseBuf;
+    f.type = type; f.frequency.value = freq; f.Q.value = 0.7;
+    this.env(g, t, 0.001, peak, d);
+    src.connect(f); f.connect(g); g.connect(this.bus);
+    src.start(t, Math.random() * 0.5); src.stop(t + d + 0.05);
+  },
+  snare(t) {
+    this.noise(t, 'bandpass', 1700, 0.42, 0.2);
+    const c = Sfx.ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = 'triangle'; o.frequency.value = 190;
+    this.env(g, t, 0.001, 0.25, 0.08);
+    o.connect(g); g.connect(this.bus);
+    o.start(t); o.stop(t + 0.12);
+  },
+  hat(t, v) { this.noise(t, 'highpass', 7000, v, 0.04); },
+  bass(f, t, d) {
+    const c = Sfx.ctx, lp = c.createBiquadFilter(), g = c.createGain();
+    lp.type = 'lowpass'; lp.frequency.value = 450 + this.lap * 150; lp.Q.value = 4;
+    this.env(g, t, 0.005, 0.3, d);
+    lp.connect(g); g.connect(this.bus);
+    [1, 1.006].forEach((m) => {
+      const o = c.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = f * m;
+      o.connect(lp); o.start(t); o.stop(t + d + 0.05);
+    });
+  },
+  pad(notes, t, d) {
+    const c = Sfx.ctx, lp = c.createBiquadFilter(), g = c.createGain();
+    lp.type = 'lowpass'; lp.frequency.value = 1300;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.5);
+    g.gain.setValueAtTime(0.05, t + d - 0.3);
+    g.gain.linearRampToValueAtTime(0.0001, t + d);
+    lp.connect(g); g.connect(this.bus);
+    notes.forEach((n) => [-7, 7].forEach((cents) => {
+      const o = c.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = this.hz(n); o.detune.value = cents;
+      o.connect(lp); o.start(t); o.stop(t + d + 0.05);
+    }));
+  },
+  lead(f, t, d) {
+    const c = Sfx.ctx, o = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
+    o.type = 'square'; o.frequency.value = f;
+    lp.type = 'lowpass'; lp.frequency.value = 2600;
+    this.env(g, t, 0.003, 0.05, d);
+    o.connect(lp); lp.connect(g); g.connect(this.bus); g.connect(this.delay);
+    o.start(t); o.stop(t + d + 0.05);
+  }
+};
+
 // -------------------------------------------------------------------- input
 const Input = {
   steer: 0, accel: 0, brake: 0,
@@ -515,46 +670,45 @@ function drawStand(ctx, x, y, w, h, t) {
   ctx.fillRect(x + w * 0.40, y + h * 0.45, w * 0.20, h * 0.47);   // slup
 }
 
-// Ekspozytor przy trasie: biala kartka ze zdjeciem produktu i podpisem.
-// Zdjecia produktowe maja jasne tlo, wiec kartka jest dla nich naturalna
-// oprawa - inaczej wisialby w powietrzu bialy prostokat.
+// Ladowarka zamocowana na slupku: wyciete zdjecie produktu na gorze slupa,
+// pod nim mala pomaranczowa tabliczka z nazwa. Bez bialej kartki.
 function drawProductStand(ctx, x, y, w, h, t, ref, name, fallback) {
-  drawStand(ctx, x, y, w, h, t);
+  const pulse = 0.5 + 0.5 * Math.sin(t * 0.006);
+  // poswiata na asfalcie - ladowarke widac z daleka
+  ctx.globalAlpha = 0.25 + 0.35 * pulse;
+  ctx.fillStyle = BRAND;
+  ctx.fillRect(x - w * 0.25, y + h * 0.95, w * 1.5, h * 0.05);
+  ctx.globalAlpha = 1;
+  // podstawa i slup
+  ctx.fillStyle = INK;
+  ctx.fillRect(x + w * 0.30, y + h * 0.92, w * 0.40, h * 0.08);
+  ctx.fillStyle = season.night ? '#8A90A0' : '#B8BEC9';
+  ctx.fillRect(x + w * 0.44, y + h * 0.20, w * 0.12, h * 0.74);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(x + w * 0.52, y + h * 0.20, w * 0.04, h * 0.74);
 
-  const cw = w * 0.94, cx = x + (w - cw) / 2, cy = y, chh = h * 0.46;
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(cx, cy, cw, chh);
-
-  const barH = chh * 0.20;
-  const pad = cw * 0.07;
-  const ix = cx + pad, iy = cy + pad;
-  const iw = cw - pad * 2, ih = chh - barH - pad * 1.6;
-
+  // urzadzenie na gorze slupa
+  const iw = w * 1.05, ih = h * 0.52;
+  const ix = x + (w - iw) / 2, iy = y;
   if (ref.ready) {
-    // Zdjecia sklepowe maja spory bialy margines, a produkt ma byc czytelny
-    // z daleka - stad lekkie przyblizenie i przyciecie do kartki.
     const ar = ref.img.naturalWidth / ref.img.naturalHeight;
     let dw = iw, dh = iw / ar;
     if (dh > ih) { dh = ih; dw = ih * ar; }
-    dw *= 1.2; dh *= 1.2;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(ix, iy, iw, ih);
-    ctx.clip();
     ctx.drawImage(ref.img, ix + (iw - dw) / 2, iy + (ih - dh) / 2, dw, dh);
-    ctx.restore();
   } else {
-    fallback(ctx, ix, iy, iw, ih);
+    fallback(ctx, ix + iw * 0.15, iy, iw * 0.7, ih);
   }
 
+  // tabliczka z nazwa na slupie
+  const pw = w * 0.56, ph = h * 0.075, px = x + (w - pw) / 2, py = y + h * 0.62;
   ctx.fillStyle = BRAND;
-  ctx.fillRect(cx, cy + chh - barH, cw, barH);
-  if (cw > 54) {
+  ctx.fillRect(px, py, pw, ph);
+  if (pw > 30) {
     ctx.fillStyle = PAPER;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '700 ' + Math.floor(barH * 0.62) + 'px Geist, Arial, sans-serif';
-    ctx.fillText(name, cx + cw / 2, cy + chh - barH * 0.46);
+    ctx.font = '700 ' + Math.floor(ph * 0.66) + 'px Geist, Arial, sans-serif';
+    ctx.fillText(name, x + w / 2, py + ph * 0.54);
   }
 }
 
@@ -2372,6 +2526,7 @@ function lapDone(overshoot) {
 function levelUp() {
   player.level++;
   applySeason(player.level);
+  Music.setLap(player.level);
   levelBanner = player.level === OMODA_LEVEL ? 4 : 2.4;
 
   // dokladamy ruchu, ale nie przestawiamy aut juz na trasie
@@ -2544,6 +2699,7 @@ function updateAttractDemo(dt) {
 
 function endRun(reason) {
   player.endReason = reason || 'finish';
+  Music.stop(2.5);
   Sfx.engineUpdate(0, false);
   document.body.classList.remove('playing');
   stateT = 0;
@@ -2576,6 +2732,7 @@ function fallbackToLocal() {
 function startRun() {
   Sfx.resume();
   resetRun();
+  Music.start();
   state = 'countdown';
   countdown = 3.99;
   stateT = 0;
