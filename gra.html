@@ -931,17 +931,18 @@ async function fetchBoard() {
   }
 }
 
-// Podium z poprzednich targow. Pobierane raz - te wyniki juz sie nie zmienia.
-let prevBoard = null;
-async function fetchPrevBoard() {
-  try {
-    const r = await fetch('/api/board?edition=knm2026&limit=3');
-    if (!r.ok) return;
-    const data = await r.json();
-    if (Array.isArray(data.board)) prevBoard = data.board;
-  } catch (e) { /* offline - po prostu bez tej linijki */ }
-}
-fetchPrevBoard();
+// Zwyciezcy KNM Katowice 2026 (23-25.09) z nagrodami, ktore wtedy szly za
+// miejsce. Wpisani na sztywno: wynik juz sie nie zmieni, a pasek ma byc
+// widoczny takze offline. Zrodlo: /api/board?edition=knm2026, stan 25.11.
+const PREV_WINNERS = [
+  { nick: 'wasyllinio',   prize: 'Ładowarka serii Q' },
+  { nick: 'PAWEŁ JUZEK',  prize: 'Ładowarka serii B' },
+  { nick: 'TomekO',       prize: 'Ładowarka serii B' },
+  { nick: 'PRZEMEK.2701', prize: 'Dr. Storm' },
+  { nick: 'KRZYSIEK',     prize: 'Dr. Storm' },
+  { nick: 'JACEK2',       prize: 'Dr. Storm' },
+  { nick: 'KACPER SZMIG', prize: 'Dr. Storm' }
+];
 
 function boardRows() {
   if (remoteBoard && remoteBoard.length) {
@@ -1674,15 +1675,25 @@ function renderPrizePhotos(x, top, u) {
   });
 }
 
-// Wyniki z KNM Katowice zostaja na ekranie jako ciekawostka - jedna linijka
-// z podium, bez nagrod. Nowa tablica startuje od zera.
-function renderPrevEdition(cx, y, u) {
-  if (!prevBoard || !prevBoard.length) return;
-  const podium = prevBoard.slice(0, 3)
-    .map((r, i) => (i + 1) + '. ' + r.nick + ' ' + String(r.score).padStart(6, '0'))
-    .join('     ');
-  text('POPRZEDNIA EDYCJA · KNM KATOWICE 2026     ' + podium, cx, y,
-       { size: u * 1.5, color: MUTED, align: 'center', mono: true, spacing: 1 });
+// Pasek zwyciezcow z KNM pod tabelami: dowod dla przechodzacego, ze nagrody
+// naprawde ktos dostal. Nowa tablica startuje od zera, ten pasek jej nie dotyka.
+function renderPrevEdition(x, y, w, u) {
+  text('ZWYCIĘZCY POPRZEDNIEJ EDYCJI · KNM KATOWICE 2026', x + w / 2, y,
+       { size: u * 1.4, color: MUTED, align: 'center', spacing: 3 });
+  const n = PREV_WINNERS.length, gap = u;
+  const cw = (w - gap * (n - 1)) / n, ch = u * 5.4, cy = y + u * 1.4;
+  PREV_WINNERS.forEach((p, i) => {
+    const cx = x + i * (cw + gap);
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(cx, cy, cw, ch);
+    ctx.strokeStyle = i === 0 ? BRAND : LINE;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx + 0.5, cy + 0.5, cw - 1, ch - 1);
+    text((i + 1) + '. ' + p.nick, cx + u, cy + ch * 0.44,
+         { size: u * 1.5, color: INK, weight: 700 });
+    text(p.prize, cx + u, cy + ch * 0.80,
+         { size: u * 1.25, color: i === 0 ? BRAND : MUTED });
+  });
 }
 
 function renderAttract() {
@@ -1724,11 +1735,11 @@ function renderAttract() {
   cx += (TABLE_W + GAP) * uu;
   renderPrizePhotos(cx, top, uu);
 
-  renderPrevEdition(W / 2, H * 0.715, uu);
+  renderPrevEdition(W / 2 - (totalW / 2) * uu, H * 0.655, totalW * uu, uu);
 
   text('zostaw e-mail po grze, żeby wziąć udział w losowaniu  ·  ' +
        (IS_TOUCH ? 'dotykaj lewej i prawej strony ekranu' : 'pad: drążek skręca, RT gazuje'),
-       W / 2, H * 0.755, { size: u * 1.9, color: MUTED, align: 'center' });
+       W / 2, H * 0.80, { size: u * 1.9, color: MUTED, align: 'center' });
 
   // wezwanie do startu: pelny prostokat w kolorze marki
   const blink = Math.floor(t / 600) % 2 === 0;
