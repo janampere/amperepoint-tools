@@ -1427,6 +1427,26 @@ let runCode = null;
 let runCodeErr = null;
 let qrCanvas = null;
 
+// Klucz stoiska: do rankingu targowego trafiaja tylko przejazdy z komputera
+// na stoisku. Obsluga otwiera raz gra.amperepoint.com/?stoisko=KLUCZ - klucz
+// laduje w pamieci przegladarki i od razu znika z paska adresu, zeby nikt go
+// nie podejrzal. Bez klucza gra dziala normalnie, wynik zostaje lokalnie.
+const KIOSK_LS = 'ampere_rush_kiosk_key';
+let kioskKey = '';
+(function initKioskKey() {
+  try {
+    const u = new URL(location.href);
+    const k = u.searchParams.get('stoisko');
+    if (k !== null) {
+      if (k === '' || k === 'wyloguj') localStorage.removeItem(KIOSK_LS);
+      else localStorage.setItem(KIOSK_LS, k);
+      u.searchParams.delete('stoisko');
+      history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+    }
+    kioskKey = localStorage.getItem(KIOSK_LS) || '';
+  } catch (e) { kioskKey = ''; }
+})();
+
 async function fetchBoard() {
   // Kiosk stoi wlaczony caly dzien, wiec odpytywanie co 12 s zjadalo ponad
   // 7000 zapytan na dobe - wiecej, niz daje darmowy plan bazy. Minuta w
@@ -1477,6 +1497,7 @@ async function requestRunCode() {
   runCode = null;
   runCodeErr = null;
   qrCanvas = null;
+  if (!kioskKey) { runCodeErr = 'online'; return; }   // gra poza stoiskiem
   try {
     // Na targowym wifi cztery sekundy bywaly za krotkie, zwlaszcza gdy
     // funkcja budzila sie na zimno - gra uznawala to za awarie i zjezdzala
@@ -1486,7 +1507,7 @@ async function requestRunCode() {
     const r = await fetch('/api/run', {
       method: 'POST',
       signal: ctl.signal,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Stoisko': kioskKey },
       body: JSON.stringify({
         score: Math.floor(player.score),   // czas przejazdu w ms
         laps: RACE.laps,
@@ -2601,7 +2622,10 @@ function renderGameOver() {
     text(IS_TOUCH ? 'DOTKNIJ — JESZCZE RAZ' : 'START — JESZCZE RAZ', W / 2, by + bh * 0.66,
          { size: u * 3, color: PAPER, align: 'center', spacing: 3, weight: 700 });
     logo(W / 2, H * 0.85, u * 3.6, 'center');
-    if (runCodeErr) {
+    if (runCodeErr === 'online') {
+      text('Wynik zapisany na tym urządzeniu. Ranking z nagrodami - na stoisku D12.', W / 2, H * 0.90,
+           { size: u * 1.5, color: MUTED, align: 'center' });
+    } else if (runCodeErr) {
       // Obsluga stoiska ma widziec, czemu nie ma kodu QR, zamiast zgadywac.
       text('kod QR niedostępny: ' + runCodeErr, W / 2, H * 0.90,
            { size: u * 1.5, color: '#D93025', align: 'center' });

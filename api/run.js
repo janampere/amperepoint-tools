@@ -22,6 +22,13 @@ async function handler(req, res) {
 
   if (req.method !== 'POST') return json(res, 405, { error: 'method_not_allowed' });
 
+  // Ranking targowy przyjmuje tylko przejazdy z komputera na stoisku (klucz
+  // w zmiennej KIOSK_KEY w Vercel). Bez ustawionej zmiennej - jak dotad.
+  const KIOSK_KEY = process.env.KIOSK_KEY || '';
+  if (KIOSK_KEY && String(req.headers['x-stoisko'] || '') !== KIOSK_KEY) {
+    return json(res, 403, { error: 'zly_klucz_stoiska' });
+  }
+
   const b = readBody(req);
   // score = czas przejazdu 3 okrazen w ms. Ponizej 30 s fizycznie sie nie da,
   // powyzej limitu 5 min gra nie wysyla wyniku.
