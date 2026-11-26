@@ -1930,6 +1930,33 @@ function text(str, x, y, opts) {
   if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 }
 
+// Biala wersja logo (znak + napis) na ekran tytulowy - na niebie o zachodzie
+// rysujemy ja bez plytki. Robiona raz z tego samego PNG: przezroczystosc
+// zostaje, kolor zamieniamy na bialy.
+let logoWhite = null;
+function logoWhiteCanvas() {
+  if (logoWhite || !logoReady || !logoImg.naturalWidth) return logoWhite;
+  const c = document.createElement('canvas');
+  c.width = logoImg.naturalWidth;
+  c.height = logoImg.naturalHeight;
+  const cx = c.getContext('2d');
+  cx.drawImage(logoImg, 0, 0);
+  cx.globalCompositeOperation = 'source-in';
+  cx.fillStyle = '#FFFFFF';
+  cx.fillRect(0, 0, c.width, c.height);
+  logoWhite = c;
+  return c;
+}
+function logoWhiteAt(x, y, h) {
+  const c = logoWhiteCanvas();
+  if (!c) {
+    text('AMPERE POINT', x, y + h * 0.35, { size: h * 0.8, color: PAPER, align: 'center', weight: 700 });
+    return;
+  }
+  const w = h * c.width / c.height;
+  ctx.drawImage(c, x - w / 2, y - h / 2, w, h);
+}
+
 function logo(x, y, h, align) {
   const ar = (logoReady && logoImg.naturalWidth) ? logoImg.naturalWidth / logoImg.naturalHeight : 4.05;
   const w = h * ar;
@@ -2298,7 +2325,7 @@ function renderAttract() {
   ov.addColorStop(1, 'rgba(255,255,255,0.88)');
   ctx.fillStyle = ov;
   ctx.fillRect(0, 0, W, H);
-  drawSun(W / 2, H * 0.215, H * 0.15, ATTRACT_TIME.sun, H * 0.305);
+  drawSun(W / 2, H * 0.27, H * 0.15, ATTRACT_TIME.sun, H * 0.305);   // nizej - logo nad sloncem, na fiolecie
 
   const t = performance.now();
 
@@ -2312,10 +2339,8 @@ function renderAttract() {
   text('PTAK WARSAW EXPO', W / 2 + u * 1.5, u * 3.3,
        { size: u * 1.6, color: BRAND, align: 'left', spacing: 3 });
 
-  // logo na bialej plytce - na fioletowym niebie ciemny znak by zniknal
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(W / 2 - u * 9.5, H * 0.093 - u * 2.6, u * 19, u * 5.2);
-  logo(W / 2, H * 0.093, u * 3.2, 'center');
+  // biale logo prosto na niebie, bez plytki
+  logoWhiteAt(W / 2, H * 0.092, u * 6.2);
 
   // Haslo bialym z grubym czarnym obrysem - czytelne i na sloncu, i na
   // fiolecie nieba. Ten zabieg kojarzy sie z GTA bez kopiowania ich logo.
