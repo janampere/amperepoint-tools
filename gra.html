@@ -2140,7 +2140,7 @@ function renderControlsHint(cx, cy, u) {
 const PLACES = 7;
 // Po jednym wierszu na miejsce, zeby rzedy obu tabel sie pokrywaly.
 const PRIZES = [
-  'GTA VI na PS5',
+  'GTA VI',
   'Ładowarka B35',
   'Ładowarka B35',
   'Dr. Storm',
@@ -2203,14 +2203,14 @@ function renderPrizes(cx, top, u) {
 // wiekszosc czasu oglada ktos, kto przechodzi obok - tabela wynikow mu nic
 // nie mowi, zdjecie ladowarki i slowo "wygraj" mowi wszystko.
 const PRIZE_CARDS = [
-  { pos: '1. MIEJSCE', name: 'GTA VI na PS5', img: () => imgGta, fallback: gtaIcon, contain: true },
+  { pos: '1. MIEJSCE', name: 'GTA VI', img: () => imgGta, fallback: gtaIcon, contain: true },
   { pos: '2-3. MIEJSCE', name: 'Ładowarka B35', img: () => imgSeriaB, fallback: primeIcon },
   { pos: '4-7. MIEJSCE', name: 'Dr. Storm', img: () => imgStorm, fallback: q11Icon }
 ];
 
-// Pudelko GTA VI na PS5 (od Jana) lezy w repo obok gry. Kafel typograficzny
+// Okladka GTA VI bez paska platformy (od Jana) - nagroda w wersji, jaka wybierze zwyciezca lezy w repo obok gry. Kafel typograficzny
 // zostaje jako zapas, gdyby zdjecie sie nie wczytalo.
-const imgGta = loadImg('gta6-ps5.jpg');
+const imgGta = loadImg('gta6.jpg');
 function gtaIcon(ctx, x, y, w, h) {
   const g = ctx.createLinearGradient(x, y, x + w, y + h);
   g.addColorStop(0, '#FF5FA2'); g.addColorStop(0.55, '#F78C3B'); g.addColorStop(1, '#5B2A86');
@@ -2246,7 +2246,7 @@ function renderPrizePhotos(x, top, u) {
     if (ref.ready) {
       const ar = ref.img.naturalWidth / ref.img.naturalHeight;
       let dw = side, dh = side / ar;
-      if (card.contain) {   // pudelko gry w calosci, z logo PS5 u gory
+      if (card.contain) {   // pudelko gry w calosci, okladka w calosci
         if (dh > side) { dh = side; dw = side * ar; }
         ctx.fillStyle = PAPER;
         ctx.fillRect(x + pad, y + pad, side, side);
