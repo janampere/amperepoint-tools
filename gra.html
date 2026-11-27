@@ -1919,8 +1919,13 @@ function render() {
     ctx.rotate(-lean * 0.05);
     // SUV dodatkowo przesuwa sie bokiem na zawieszeniu
     ctx.translate(-W / 2 + (omoda ? -lean * cw * 0.04 : 0), -(cy + ch));
-    if (omoda) drawOmoda(ctx, cx, cy, cw, ch, OMODA_SKIN, { boost: speedPct > 0.75 });
-    else drawCar(ctx, cx, cy, cw, ch, PLAYER_SKIN, { boost: speedPct > 0.75 });
+    if (omoda) {
+      drawOmoda(ctx, cx, cy, cw, ch, OMODA_SKIN, { boost: speedPct > 0.75 });
+      drawSygnet(ctx, cx + cw / 2, cy + ch * 0.685, ch * 0.15, false);
+    } else {
+      drawCar(ctx, cx, cy, cw, ch, PLAYER_SKIN, { boost: speedPct > 0.75 });
+      drawSygnet(ctx, cx + cw / 2, cy + ch * 0.70, ch * 0.15, true);
+    }
     ctx.restore();
   }
 
@@ -1998,6 +2003,34 @@ function logoWhiteAt(x, y, h) {
   }
   const w = h * c.width / c.height;
   ctx.drawImage(c, x - w / 2, y - h / 2, w, h);
+}
+
+// Sygnet (samo "a" z logo) na tyl auta gracza. Wycinany z tego samego PNG:
+// znak zajmuje lewa czesc pliku (x 4-174, y 30-192 z 810x200). Dwie wersje:
+// biala na pomaranczowe auto, oryginalna pomaranczowa na biala Omode.
+const sygnet = {};
+function sygnetCanvas(white) {
+  const key = white ? 'w' : 'o';
+  if (sygnet[key] || !logoReady || !logoImg.naturalWidth) return sygnet[key] || null;
+  const nw = logoImg.naturalWidth, nh = logoImg.naturalHeight;
+  const sx = nw * 4 / 810, sy = nh * 30 / 200, sw = nw * 171 / 810, sh = nh * 163 / 200;
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(sw); c.height = Math.ceil(sh);
+  const cx = c.getContext('2d');
+  cx.drawImage(logoImg, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  if (white) {
+    cx.globalCompositeOperation = 'source-in';
+    cx.fillStyle = '#FFFFFF';
+    cx.fillRect(0, 0, c.width, c.height);
+  }
+  sygnet[key] = c;
+  return c;
+}
+function drawSygnet(ctx, cx, cy, h, white) {
+  const c = sygnetCanvas(white);
+  if (!c) return;
+  const w = h * c.width / c.height;
+  ctx.drawImage(c, cx - w / 2, cy - h / 2, w, h);
 }
 
 function logo(x, y, h, align) {
