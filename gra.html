@@ -1248,27 +1248,51 @@ function addScenery() {
     if (i % 180 === 40) s.sprites.push({ sprite: SPR.billboard, offset: (Math.random() < 0.5 ? -1 : 1) * 1.9 });
     if (i % 260 === 90) s.sprites.push({ sprite: SPR.gantry, offset: 0 });
   }
-  // ladowarki + pachołki na jezdni; produkty lecą na przemian
+  // ladowarki + pachołki na jezdni; produkty lecą na przemian.
+  // Zasady uczciwosci (przy turbo auto robi ~70 odcinkow na sekunde):
+  // - na pasie ladowarki nic nie stoi przez 60 odcinkow za nia - slup
+  //   ladowarki zaslania to, co jest tuz za nim, a gracz patrzy na ladowarke;
+  // - pachołki stoja co najmniej 30 odcinkow od siebie, wiec nigdy nie
+  //   zamykaja wszystkich trzech pasow naraz.
+  const LANES = [-0.62, 0, 0.62];
+  const cones = [];   // { i, lane }
+  const chargers = []; // { i, lane }
+  const coneOk = (ci, lane) => {
+    if (!segments[ci]) return false;
+    if (cones.some((c) => Math.abs(c.i - ci) < 30)) return false;
+    return !chargers.some((c) => {
+      const d = ci - c.i;
+      if (d > -12 && d < 25) return true;               // wokol ladowarki zadnych pachołkow
+      return lane === c.lane && d >= 0 && d < 60;      // za nia na jej pasie - czysto
+    });
+  };
+  const addCone = (ci, lane, minLevel) => {
+    if (!coneOk(ci, lane)) return;
+    cones.push({ i: ci, lane });
+    segments[ci].sprites.push(Object.assign({ sprite: SPR.cone, offset: lane, kind: 'cone' }, minLevel ? { minLevel } : {}));
+  };
+  // najpierw wszystkie ladowarki, potem pachołki - zeby kazdy pachołek
+  // znal tez ladowarke, ktora stoi dalej na trasie
   let i = 120;
   let alt = 0;
   while (i < n - 120) {
-    const lane = pick([-0.62, 0, 0.62]);
+    const lane = pick(LANES);
     const charger = (alt++ % 2 === 0) ? SPR.prime : SPR.q11;
     segments[i].sprites.push({ sprite: charger, offset: lane, kind: 'pickup', takenAt: -1e9 });
-    // czasem pachołek w innym pasie tuz obok - zmusza do wyboru toru
+    chargers.push({ i, lane });
+    i += rndInt(140, 260);
+  }
+  for (const c of chargers) {
+    // czasem pachołek w innym pasie przed ladowarka - zmusza do wyboru toru,
+    // ale z wyprzedzeniem, ktore da sie przejechac
     if (Math.random() < 0.55) {
-      const other = pick([-0.62, 0, 0.62].filter((l) => l !== lane));
-      segments[i + rndInt(4, 14)].sprites.push({ sprite: SPR.cone, offset: other, kind: 'cone' });
+      addCone(c.i - rndInt(30, 45), pick(LANES.filter((l) => l !== c.lane)));
     }
     // Dodatkowe przeszkody czekaja na wyzsze poziomy - ta sama trasa
     // robi sie wtedy ciasniejsza, bez przebudowywania jej w locie.
     for (const lvl of [2, 3, 4]) {
-      if (Math.random() < 0.5) {
-        const seg = segments[i + rndInt(20, 110)];
-        if (seg) seg.sprites.push({ sprite: SPR.cone, offset: pick([-0.62, 0, 0.62]), kind: 'cone', minLevel: lvl });
-      }
+      if (Math.random() < 0.5) addCone(c.i + rndInt(40, 120), pick(LANES), lvl);
     }
-    i += rndInt(140, 260);
   }
 }
 
