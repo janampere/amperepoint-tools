@@ -108,7 +108,7 @@ const imgQ11 = loadImg('q11-cut.png');
 // Zdjecie Omody leci tylko do banera nagrody - to kadr z tlem, wiec jako
 // sprite na jezdni wygladalby jak latajacy prostokat. Na e-Mobility Omoda 5
 // (biala, na sniegu - grudzien), na KNM byla Omoda 9.
-const imgOmoda = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/omoda_5_ladowanie_gniazdo_ladowania_ampere_point_2.png?v=1768399582&width=640');
+const imgOmoda = loadImg('omoda5-cut.png');   // nasze zdjecie ze sklepu, wyciete z tla
 
 // Zdjecia nagrod na ekran tytulowy - to one maja zatrzymac przechodzacego.
 const imgSeriaB = loadImg('https://cdn.shopify.com/s/files/1/0780/2218/1190/files/ampere_point_b35_ladowarka_Schuko_230V_1.jpg?v=1765364614&width=480');
@@ -1773,6 +1773,23 @@ function renderStars(horizon) {
 
 let skyOffset = 0;
 
+// Kamera podnosi sie przed zjazdem. Na szczycie gorki droga za grzbietem
+// chowala sie pod horyzontem i gracz jechal w ciemno. Patrzymy kawalek do
+// przodu: im glebiej droga opada, tym wyzej kamera - plynnie, bez skokow.
+let camLift = 0;
+function updateCamLift() {
+  const base = player.position + playerZ;
+  const here = findSegment(base);
+  const y0 = lerp(here.p1.world.y, here.p2.world.y, (base % CFG.segmentLength) / CFG.segmentLength);
+  let drop = 0;
+  for (let k = 8; k <= 48; k += 8) {
+    const seg = findSegment(base + k * CFG.segmentLength);
+    drop = Math.max(drop, (y0 - seg.p1.world.y) * (1 - k / 80));
+  }
+  const target = clamp(drop * 0.55, 0, CFG.cameraHeight * 1.3);
+  camLift += (target - camLift) * (target > camLift ? 0.07 : 0.035);
+}
+
 function render() {
   const baseSegment = findSegment(player.position);
   const basePercent = (player.position % CFG.segmentLength) / CFG.segmentLength;
@@ -1780,6 +1797,8 @@ function render() {
   const playerPercent = ((player.position + playerZ) % CFG.segmentLength) / CFG.segmentLength;
   const playerY = lerp(playerSegment.p1.world.y, playerSegment.p2.world.y, playerPercent);
   const speedPct = player.speed / maxSpeed;
+  updateCamLift();
+  const camH = CFG.cameraHeight + camLift;
 
   ctx.save();
   if (player.shake > 0) {
@@ -1802,8 +1821,8 @@ function render() {
     seg.clip = maxy;
 
     const camZ = player.position - (seg.looped ? trackLength : 0);
-    project(seg.p1, (player.x * CFG.roadWidth) - x, playerY + CFG.cameraHeight, camZ);
-    project(seg.p2, (player.x * CFG.roadWidth) - x - dx, playerY + CFG.cameraHeight, camZ);
+    project(seg.p1, (player.x * CFG.roadWidth) - x, playerY + camH, camZ);
+    project(seg.p2, (player.x * CFG.roadWidth) - x - dx, playerY + camH, camZ);
 
     x += dx;
     dx += seg.curve;
@@ -2086,22 +2105,46 @@ function renderHUD() {
     const p = clamp(levelBanner / (reward ? 4 : 2.4), 0, 1);
     const slide = (1 - Math.min(1, ((reward ? 4 : 2.4) - levelBanner) * 4)) * u * 8;
     ctx.globalAlpha = Math.min(1, p * 2.5);
-    const bh = u * (withPhoto ? 34 : 16), by = H * (withPhoto ? 0.22 : 0.30) + slide;
-    ctx.fillStyle = INK;
-    ctx.fillRect(0, by, W, bh);
-    ctx.fillStyle = BRAND;
-    ctx.fillRect(0, by + bh - u * 1.2, W, u * 1.2);
 
     if (reward) {
-      text('OMODA 5 ODBLOKOWANA', W / 2, by + u * 7,
-           { size: u * 6.4, color: PAPER, align: 'center', spacing: 5, weight: 900 });
+      // Omoda bez paska na caly ekran: wyciete auto z pomaranczowa poswiata,
+      // mruga i nie zaslania drogi przed autem gracza.
+      const blink = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() * 0.009));
+      const cx = W / 2, cy = H * 0.27 + slide;
+      const ph = u * 14;
       if (withPhoto) {
-        const ph = u * 18, pw = ph * (imgOmoda.img.naturalWidth / imgOmoda.img.naturalHeight);
-        ctx.drawImage(imgOmoda.img, W / 2 - pw / 2, by + u * 10, pw, ph);
+        const pw = ph * (imgOmoda.img.naturalWidth / imgOmoda.img.naturalHeight);
+        const g = ctx.createRadialGradient(cx, cy, ph * 0.15, cx, cy, pw * 0.75);
+        g.addColorStop(0, 'rgba(255,106,0,' + (0.75 * blink) + ')');
+        g.addColorStop(0.5, 'rgba(255,79,31,' + (0.35 * blink) + ')');
+        g.addColorStop(1, 'rgba(255,79,31,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(cx - pw, cy - ph, pw * 2, ph * 2);
+        ctx.drawImage(imgOmoda.img, cx - pw / 2, cy - ph / 2, pw, ph);
       }
-      text('NOWA FURA · OSTATNIE OKRĄŻENIE', W / 2, by + bh - u * 3.4,
-           { size: u * 2.2, color: BRAND, align: 'center', spacing: 4 });
+      const ty = cy - ph / 2 - u * 1.6;
+      setFont(u * 4.4, 900);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = u * 0.9;
+      ctx.strokeStyle = INK;
+      ctx.strokeText('OMODA 5 ODBLOKOWANA', cx, ty);
+      ctx.fillStyle = blink > 0.75 ? BRAND : PAPER;
+      ctx.fillText('OMODA 5 ODBLOKOWANA', cx, ty);
+      ctx.lineJoin = 'miter';
+      const sy = cy + ph / 2 + u * 3.2;
+      setFont(u * 1.9, 700);
+      ctx.lineWidth = u * 0.6;
+      ctx.strokeText('NOWA FURA · OSTATNIE OKRĄŻENIE', cx, sy);
+      ctx.fillStyle = PAPER;
+      ctx.fillText('NOWA FURA · OSTATNIE OKRĄŻENIE', cx, sy);
     } else {
+      const bh = u * 16, by = H * 0.30 + slide;
+      ctx.fillStyle = INK;
+      ctx.fillRect(0, by, W, bh);
+      ctx.fillStyle = BRAND;
+      ctx.fillRect(0, by + bh - u * 1.2, W, u * 1.2);
       text('OKRĄŻENIE ' + player.level + '/' + RACE.laps, W / 2, by + u * 8,
            { size: u * 8, color: PAPER, align: 'center', spacing: 6, weight: 900 });
       text(season.name + ' · POPRZEDNIE OKR. ' + fmtTime(player.lastLap * 1000),
